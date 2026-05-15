@@ -183,8 +183,8 @@ function Dashboard() {
   const fyLabel     = `FY${fyEnd.getFullYear()}`;
   const prevFyLabel = `FY${prevFyEnd.getFullYear()}`;
 
-  // Next 60-day window
-  const window2M = useMemo(() => { const d = new Date(today); d.setDate(d.getDate()+60); return d; }, [today]);
+  // Next 30-day window
+  const window2M = useMemo(() => { const d = new Date(today); d.setDate(d.getDate()+30); return d; }, [today]);
 
   // Count Mon-Fri working days in a range
   const workingDays = (s, e) => {
@@ -203,13 +203,13 @@ function Dashboard() {
     missions.filter(m => m.deadline && inRange(m.deadline, prevFyStart, prevFyEnd)),
     [missions, prevFyStart, prevFyEnd]);
 
-  // Jobs overlapping the next 60 days
+  // Jobs overlapping the next 30 days
   const pipelineJobs = useMemo(() => jobs.filter(j => {
     if (!j.planningStart || !j.planningEnd) return false;
     return new Date(j.planningEnd) >= today && new Date(j.planningStart) <= window2M;
   }), [jobs, today, window2M]);
 
-  // Per-person utilization over next 60 days
+  // Per-person utilization over next 30 days
   const utilization = useMemo(() => activeTeam.map(member => {
     const days = new Set();
     let count = 0;
@@ -263,7 +263,7 @@ function Dashboard() {
            .map(j => ({id:'jo'+j.id, client:j.client, type:j.type||'Job', deadline:j.signOff})),
   ].sort((a,b) => a.deadline > b.deadline ? 1 : -1).slice(0,5), [missions, jobs, today]);
 
-  // Upcoming leaves in next 60 days
+  // Upcoming leaves in next 30 days
   const upcomingLeaves = useMemo(() => leaves.filter(l =>
     l.start && l.end && new Date(l.end) >= today && new Date(l.start) <= window2M
   ).sort((a,b) => a.start > b.start ? 1 : -1), [leaves, today, window2M]);
@@ -290,7 +290,7 @@ function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label:`${fyLabel} missions`, value: currentFyMissions.length, bg:'bg-blue-500',    icon:'📁' },
-          { label:'Pipeline (60 days)',  value: pipelineJobs.length,       bg:'bg-violet-500',  icon:'📅' },
+          { label:'Pipeline (30 days)',  value: pipelineJobs.length,       bg:'bg-violet-500',  icon:'📅' },
           { label:'Avg utilization',     value:`${avgUtil}%`,              bg:'bg-emerald-500', icon:'⚡' },
           { label:'BD win rate',         value: bizTotal>0?`${winRate}%`:'—', bg:'bg-amber-500', icon:'🏆' },
         ].map(s => (
@@ -310,7 +310,7 @@ function Dashboard() {
       {/* Team utilization */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
         <div className="mb-4">
-          <h2 className="font-semibold">Team utilization — next 60 days</h2>
+          <h2 className="font-semibold">Team utilization — next 30 days</h2>
           <p className="text-xs text-gray-400 mt-0.5">{fmtDate(today)} → {fmtDate(window2M)} · {totalDays2M} working days available</p>
         </div>
         {activeTeam.length === 0 ? (
@@ -339,9 +339,9 @@ function Dashboard() {
       {/* Pipeline + Mission status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-          <h2 className="font-semibold mb-3">📅 Pipeline — next 60 days</h2>
+          <h2 className="font-semibold mb-3">📅 Pipeline — next 30 days</h2>
           {pipelineJobs.length === 0 ? (
-            <p className="text-sm text-gray-400">No jobs planned in the next 60 days. Allocate them in Planning.</p>
+            <p className="text-sm text-gray-400">No jobs planned in the next 30 days. Allocate them in Planning.</p>
           ) : (
             <div className="divide-y divide-gray-50">
               {pipelineJobs.slice(0,8).map(j => (
@@ -453,7 +453,7 @@ function Dashboard() {
       {/* Upcoming leaves */}
       {upcomingLeaves.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-          <h2 className="font-semibold mb-3">🏖️ Upcoming leaves — next 60 days</h2>
+          <h2 className="font-semibold mb-3">🏖️ Upcoming leaves — next 30 days</h2>
           <div className="divide-y divide-gray-50">
             {upcomingLeaves.map(l => {
               const start = new Date(l.start);
@@ -1783,7 +1783,7 @@ function LeavesTab({ activeTeam }) {
 
       {upcoming.length > 0 && (
         <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 space-y-2">
-          <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Upcoming in the next 60 days</p>
+          <p className="text-xs font-semibold text-orange-700 uppercase tracking-wide">Upcoming in the next 30 days</p>
           {upcoming.map(l => {
             const tm = activeTeam.find(m => m.name === l.member);
             return (
