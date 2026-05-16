@@ -1284,7 +1284,11 @@ function GanttChart() {
                         onDragStart={e => !wknd && handleJobDragStart(e, j, d)}
                         onDragEnd={handleJobDragEnd}
                         title={`${j.client} — ${(j.workers||[]).join(', ')}\n${j.planningStart} → ${j.planningEnd}\nDrag to shift dates`}
-                        className={`h-5 w-full ${TYPE_COLORS[j.type]||'bg-blue-400'} ${wknd?'opacity-20':'opacity-80 cursor-grab active:cursor-grabbing'} ${start?'rounded-l-full':''} ${end?'rounded-r-full':''}`} />
+                        className={`h-5 w-full flex items-center px-1 overflow-hidden ${TYPE_COLORS[j.type]||'bg-blue-400'} ${wknd?'opacity-20':'opacity-80 cursor-grab active:cursor-grabbing'} ${start?'rounded-l':''} ${end?'rounded-r':''}`}>
+                        <span className="text-white text-[9px] font-semibold whitespace-nowrap overflow-hidden">
+                          {j.client.length>5?j.client.slice(0,5)+'…':j.client}
+                        </span>
+                      </div>
                     )}
                   </div>
                 );
@@ -1787,7 +1791,7 @@ function TeamGanttActive({ activeTeam }) {
                                     className="absolute inset-0 rounded flex items-center overflow-hidden cursor-grab active:cursor-grabbing"
                                     style={{background: color, paddingLeft: isFirstCell?8:2, paddingRight: isLastCell?8:2}}>
                                     <span className="text-white text-[9px] font-semibold overflow-hidden whitespace-nowrap">
-                                      {isFirstCell ? (j.client.length>5?j.client.slice(0,5)+'…':j.client) : ''}
+                                      {j.client.length>5?j.client.slice(0,5)+'…':j.client}
                                     </span>
                                   </div>
                                   {/* Right resize handle — move end date */}
