@@ -1624,8 +1624,8 @@ function TeamGanttActive({ activeTeam }) {
     return Math.round((new Date(toStr) - new Date(fromStr)) / 86400000);
   };
 
-  const handleJobDragStart = (e, job, dateStr) => {
-    dragInfoRef.current = { jobId: job.id, originDateStr: dateStr };
+  const handleJobDragStart = (e, job, dateStr, type = 'move') => {
+    dragInfoRef.current = { jobId: job.id, originDateStr: dateStr, type };
     setDraggingJobId(job.id);
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -1643,10 +1643,20 @@ function TeamGanttActive({ activeTeam }) {
     dragInfoRef.current = null;
     setDraggingJobId(null);
     if (!job || !(job.workers||[]).includes(member.name)) return;
-    const delta = dateDeltaDays(di.originDateStr, targetDateStr);
-    if (delta === 0) return;
-    const newStart = addDaysStr(job.planningStart, delta);
-    const newEnd   = addDaysStr(job.planningEnd, delta);
+    let newStart = job.planningStart;
+    let newEnd   = job.planningEnd;
+    if (di.type === 'resize-end') {
+      if (targetDateStr <= job.planningStart) return;
+      newEnd = targetDateStr;
+    } else if (di.type === 'resize-start') {
+      if (targetDateStr >= job.planningEnd) return;
+      newStart = targetDateStr;
+    } else {
+      const delta = dateDeltaDays(di.originDateStr, targetDateStr);
+      if (delta === 0) return;
+      newStart = addDaysStr(job.planningStart, delta);
+      newEnd   = addDaysStr(job.planningEnd, delta);
+    }
     const conflicts = checkLeaveConflicts(job.workers, newStart, newEnd, leaves);
     if (conflicts.length > 0) {
       setPendingDrag({ job, newStart, newEnd, conflicts });
@@ -1751,17 +1761,45 @@ function TeamGanttActive({ activeTeam }) {
                                 🏖
                               </div>
                             )}
-                            {!onLeave && active.map(j => (
-                              <div key={j.id}
-                                draggable
-                                onDragStart={e => handleJobDragStart(e, j, dateStr)}
-                                onDragEnd={handleJobDragEnd}
-                                title={`${j.client}${j.numDays?' — '+j.numDays+(j.effortUnit==='hours'?'h':'d'):''}\n${j.planningStart} → ${j.planningEnd}\nDrag to shift dates`}
-                                className="h-5 rounded text-white text-[9px] font-semibold flex items-center px-1 overflow-hidden cursor-grab active:cursor-grabbing select-none"
-                                style={{background: clientColorMap[j.client]||'#3b82f6', opacity: draggingJobId===j.id ? 0.4 : 0.9}}>
-                                {j.client.length>6?j.client.slice(0,6)+'…':j.client}
-                              </div>
-                            ))}
+                            {!onLeave && active.map(j => {
+                              const isFirstCell = dateStr === j.planningStart;
+                              const isLastCell  = dateStr === j.planningEnd;
+                              const color = clientColorMap[j.client]||'#3b82f6';
+                              const faded = draggingJobId === j.id;
+                              return (
+                                <div key={j.id} className="relative h-5 select-none" style={{opacity: faded ? 0.4 : 1}}>
+                                  {/* Left resize handle — move start date */}
+                                  {isFirstCell && (
+                                    <div draggable
+                                      onDragStart={e => { e.stopPropagation(); handleJobDragStart(e, j, dateStr, 'resize-start'); }}
+                                      onDragEnd={handleJobDragEnd}
+                                      title="Drag to change start date"
+                                      className="absolute left-0 top-0 bottom-0 w-2 z-10 cursor-col-resize rounded-l"
+                                      style={{background:'rgba(0,0,0,0.28)'}} />
+                                  )}
+                                  {/* Main bar — move entire job */}
+                                  <div draggable
+                                    onDragStart={e => handleJobDragStart(e, j, dateStr, 'move')}
+                                    onDragEnd={handleJobDragEnd}
+                                    title={`${j.client}${j.numDays?' — '+j.numDays+(j.effortUnit==='hours'?'h':'d'):''}\n${j.planningStart} → ${j.planningEnd}\nDrag centre to move · drag edges to resize`}
+                                    className="absolute inset-0 rounded flex items-center overflow-hidden cursor-grab active:cursor-grabbing"
+                                    style={{background: color, paddingLeft: isFirstCell?8:2, paddingRight: isLastCell?8:2}}>
+                                    <span className="text-white text-[9px] font-semibold overflow-hidden whitespace-nowrap">
+                                      {isFirstCell ? (j.client.length>5?j.client.slice(0,5)+'…':j.client) : ''}
+                                    </span>
+                                  </div>
+                                  {/* Right resize handle — move end date */}
+                                  {isLastCell && (
+                                    <div draggable
+                                      onDragStart={e => { e.stopPropagation(); handleJobDragStart(e, j, dateStr, 'resize-end'); }}
+                                      onDragEnd={handleJobDragEnd}
+                                      title="Drag to change end date"
+                                      className="absolute right-0 top-0 bottom-0 w-2 z-10 cursor-col-resize rounded-r"
+                                      style={{background:'rgba(0,0,0,0.28)'}} />
+                                  )}
+                                </div>
+                              );
+                            })}
                             {blocks.map(b => (
                               <div key={b.id}
                                 title={b.label}
@@ -1797,7 +1835,7 @@ function TeamGanttActive({ activeTeam }) {
         </div>
       )}
       <div className="px-4 py-2 border-t bg-gray-50">
-        <p className="text-xs text-gray-400">💡 Drag a project bar to shift its dates · Hover a member and click <strong>+</strong> to add a manual block · Click a block to edit or delete</p>
+        <p className="text-xs text-gray-400">💡 Drag the <strong>centre</strong> of a bar to move the whole engagement · Drag the <strong>dark edges</strong> to resize start or end · Hover a member row and click <strong>+</strong> to add a manual block · Click a block to edit or delete</p>
       </div>
 
       {blockModal && (
