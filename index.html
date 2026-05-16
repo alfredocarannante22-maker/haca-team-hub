@@ -2773,27 +2773,51 @@ function Guidelines() {
       title: 'Dashboard',
       summary: 'Real-time overview of team activity, pipeline health, and upcoming commitments.',
       items: [
-        { label: 'KPI cards', desc: 'Total active missions, jobs in progress, and overall team utilization at a glance.' },
-        { label: '2-week utilization bars', desc: 'Shows how loaded each team member is over the next two working weeks so you can spot capacity gaps early.' },
-        { label: 'Mission status chart', desc: 'Mirrors the Deal Flow pipeline — bar breakdown by status (Not Started, In progress, Pending, Review, Sent).' },
-        { label: 'Type breakdown', desc: 'Donut chart splitting active work by job type: Valuation Audit, Valuation Consulting, TS, CFO, Training, etc.' },
-        { label: 'Upcoming leaves', desc: 'Lists all leave periods starting within the next 30 days across the whole team.' },
-        { label: 'Deadline alerts', desc: 'Flags any mission or job whose deadline falls within the next 7 days.' },
-        { label: 'Historicals', desc: 'Month-by-month charts of completed missions and jobs — useful for capacity reviews and billing analysis.' },
-        { label: 'Member project history', desc: 'Collapsible section listing every mission and job each active team member has ever been assigned to, with dates.' },
+        { label: 'KPI cards', desc: 'Four cards at the top: active missions count, jobs in progress, overall team utilization percentage over the next 2 weeks, and business dev win rate (resolved deals only).' },
+        { label: '2-week utilization bars', desc: 'One bar per active team member showing their workload over the next 14 working days (weekends excluded). Green = available, amber = busy, red = overloaded. Only members marked Active appear here — allocation-only members (Geoffrey, Samuel) are excluded.' },
+        { label: 'Mission status chart', desc: 'Horizontal bar chart showing how many missions and Deal Flow jobs sit in each status: Not Started, In progress, Pending, Review, GB & SC Review, Sent. Click any bar row to expand it and see the exact client names in that status. Click again to collapse.' },
+        { label: 'Work breakdown — Current projects', desc: 'Left donut chart. Counts only active jobs and missions (Sent and Lost are excluded). Shows the split by job type: Valuation Audit, Valuation Consulting, Transaction Services, CFO, Internal Training, External Training, Business Development, Other.' },
+        { label: 'Work breakdown — All incl. historical', desc: 'Right donut chart. Counts everything: all current jobs, all missions (including Sent/Lost), plus missions from the previous fiscal year (July–June). Use this to see the cumulative type mix over time.' },
+        { label: 'Upcoming leaves', desc: 'Lists all leave periods for active team members starting within the next 30 days. Ordered by start date. Use this to anticipate capacity gaps when assigning new work.' },
+        { label: 'Deadline alerts', desc: 'Flags any mission or job whose deadline or sign-off date falls within the next 7 days. Shows client name, type, and exact date. Disappears automatically once the deadline has passed.' },
+        { label: 'Historicals', desc: 'Collapsible section showing all missions from the previous fiscal year (FY = July to June). Click the header to expand. Useful for billing reviews or capacity analysis of past periods.' },
+        { label: 'Member project history', desc: 'Collapsible section listing every mission and job each active team member has ever been assigned to, with dates. Ordered most recent first per member.' },
       ]
     },
     {
       id: 'dealflow',
       icon: '💼',
       title: 'Deal Flow',
-      summary: 'Track all active mandates and pipeline jobs from first contact to final delivery.',
+      summary: 'Track all active mandates and pipeline missions from first contact to final delivery.',
       items: [
-        { label: 'Missions', desc: 'A mission represents a client engagement at mandate level. Assign team members, set a deadline, choose a status, and add comments.' },
-        { label: 'Statuses', desc: 'Not Started → In progress → Pending → Review → GB & SC Review → Sent. Items marked Sent or Lost are automatically sorted to the bottom with a visual separator.' },
-        { label: 'Jobs in Deal Flow', desc: 'Planning jobs can be sent to Deal Flow via the ⋯ menu. Once sent, they appear here alongside missions and are included in the Monday Meeting agenda.' },
-        { label: 'GB & SC Review', desc: 'A dedicated status for partner sign-off. GB and SC are silent partners — they do not appear in planning or allocation views, only in this status label.' },
-        { label: 'Comments', desc: 'Free-text notes per mission for meeting context, client updates, or next-step reminders.' },
+        { label: 'Missions', desc: 'A mission is a client engagement at mandate level. Each mission has a client name, assigned workers, a type (Valuation Audit, Transaction Services, etc.), a specific mission/scope description, a status, a deadline, and free-text comments.' },
+        { label: 'Status flow', desc: 'Not Started → In progress → Pending → Review → GB & SC Review → Sent. Change status inline via the dropdown in each row. The status also drives the Mission status chart on the Dashboard and the Monday Meeting agenda.' },
+        { label: 'Active pipeline section', desc: 'All non-sent missions appear at the top. Click the "▼ Active pipeline" row header to collapse or expand this group — useful to reduce visual noise when you only need to see completed items.' },
+        { label: 'Sent / Closed section', desc: 'Missions with status Sent or Lost are automatically sorted to the bottom under a separate collapsible header "✓ Sent / Closed". This section starts collapsed by default. Expand it only when you need to review completed work.' },
+        { label: 'Unallocated missions in Planning', desc: 'If a mission has no workers assigned, it automatically appears in Planning → Not Allocated (blue-bordered cards, labelled "Deal Flow"). Assign workers there and the mission updates in Deal Flow too. The flow is one-way: Deal Flow → Planning. You cannot push from Planning into Deal Flow missions (only Planning jobs can be sent to Deal Flow via the ⋯ menu).' },
+        { label: 'Jobs in Deal Flow', desc: 'Planning jobs can be pushed to Deal Flow using the ⋯ → Send to Deal Flow option in the Jobs tab. Once pushed, they appear here alongside missions (marked with a "Job" badge) and are included in the Monday Meeting agenda.' },
+        { label: 'GB & SC Review', desc: 'A dedicated status for partner sign-off before a report is sent. Geoffrey and Samuel are partners — they appear in the worker picker for assignment but are excluded from utilization bars, calendars, and Gantt views.' },
+        { label: 'Search and filter', desc: 'Use the search bar to filter by client name or assigned worker. Use the status dropdown to show only one status at a time. Filters apply to both active and closed sections simultaneously.' },
+        { label: 'Comments', desc: 'Free-text field per mission for meeting context, client updates, waiting reasons, or next-step reminders. Displayed in the Monday Meeting step-through.' },
+      ]
+    },
+    {
+      id: 'bizdev',
+      icon: '🤝',
+      title: 'Business Development',
+      summary: 'Track commercial opportunities — from offers sent to pipeline deals in progress.',
+      items: [
+        { label: 'Offer vs Pipe', desc: 'Two types of business dev entry. Offer = a formal proposal sent to a prospective client. Pipe = an ongoing opportunity in the pipeline that has not yet reached the offer stage. Filter by type using the tabs at the top.' },
+        { label: 'Opportunity', desc: 'The client or prospect name for this business dev entry.' },
+        { label: 'Responsible', desc: 'The partner(s) leading the commercial relationship (typically Geoffrey or Samuel). Entered as a comma-separated list.' },
+        { label: 'Potential workers', desc: 'The team members who would do the work if the deal is won. Used for anticipatory capacity planning.' },
+        { label: 'Mission / scope', desc: 'Description of the service being proposed: e.g. VDD RE + Tax, CFO - Cash rec, Transaction assistance.' },
+        { label: 'Status', desc: 'Not started, Sent, Pending, or Pause. Reflects where the opportunity stands in the commercial process.' },
+        { label: 'Outcome', desc: 'Win, Loss, or Pause. Once set, this drives the Win Rate KPI on the Dashboard (wins ÷ resolved deals). Leave blank for open opportunities.' },
+        { label: 'Win %', desc: 'Your estimated probability of winning this deal (0–100). Shown in the table for quick scanning. Does not feed into any automatic calculation — it is a qualitative indicator.' },
+        { label: 'Sent date', desc: 'Date the offer or proposal was sent to the prospect. Used as a reference point for follow-up.' },
+        { label: 'Timeline', desc: 'Free-text field for the expected duration or schedule of the engagement if won (e.g. "3 weeks from 19/01", "2 months from April 2026").' },
+        { label: 'Comments', desc: 'Any additional context: client feedback, blockers, next steps, or follow-up notes.' },
       ]
     },
     {
@@ -2802,25 +2826,42 @@ function Guidelines() {
       title: 'Planning',
       summary: 'Allocate team members to jobs, visualise workload across months, and manage leaves.',
       items: [
-        { label: 'Not Allocated', desc: 'Lists jobs with no assigned team member or no planned dates. Select workers and set a start/end window to allocate. Worker buttons turn orange if that member is on leave during the selected period.' },
-        { label: 'Calendar', desc: 'Month-by-month calendar view of all active planning jobs with colour coding by client.' },
-        { label: 'Jobs', desc: 'Table view of all jobs showing effort (days or hours), status, assigned workers, and planning dates. Inline editing — click a row to open the full edit form.' },
-        { label: 'Project Gantt', desc: 'Horizontal Gantt by project. Drag the centre of a bar to shift the whole engagement. Drag the dark left or right edge to resize only the start or end date. Add new jobs or edit existing ones directly from the Gantt — all changes sync with the Jobs list.' },
-        { label: 'Team Gantt', desc: '4-month Gantt organised by team member. The navigation header shows the full date range; clicking Prev / Next shifts all four months together. Drag bar centres to move engagements; drag edges to resize. Hover a member row and click + to add a manual block (training, internal, admin) stored separately from planning jobs. Click any block to edit or delete it.' },
-        { label: 'Leaves', desc: 'Record absences by member and type (Annual Leave, Sick, Public Holiday, etc.). Leave periods appear on all Gantt and calendar views as orange markers. The system blocks planning during leave and shows a modal asking whether to override.' },
+        { label: 'Not Allocated — Planning jobs', desc: 'Shows jobs with no workers assigned at all. Select team members using the toggle buttons and set a start/end date, then click "Allocate ✓". Member buttons turn orange if that person is on leave during the selected period — you will see a confirmation modal before saving.' },
+        { label: 'Not Allocated — Deal Flow missions', desc: 'Missions in Deal Flow with no workers assigned appear here automatically as blue-bordered cards (labelled "Deal Flow"). Select team members and click "Assign ✓". This saves workers to the mission AND creates a new Planning job for scheduling. No dates are required at this step.' },
+        { label: 'Geoffrey & Samuel in allocation', desc: 'Geoffrey and Samuel appear as buttons in all "Assign to" panels and in the worker pickers throughout the app. However, they do not appear in utilization bars, the Team Gantt, the Calendar, or the Leaves tab — they are allocation-only partners, not tracked for capacity.' },
+        { label: 'Jobs tab — Add dates warning', desc: 'Jobs that have workers assigned but no planning start/end dates show an orange "⚠️ Add dates" badge in the Planning column. These jobs are typically created automatically when you allocate a Deal Flow mission. Open the ⋯ menu → Edit to add the planning dates.' },
+        { label: 'Jobs tab — Send to Deal Flow', desc: 'Any Planning job can be pushed into Deal Flow via ⋯ → Send to Deal Flow. It will then appear in Deal Flow alongside missions, be included in the Monday Meeting agenda, and show a "💼 In Deal Flow" badge. Use ⋯ → Remove from Deal Flow to unlink it.' },
+        { label: 'Jobs tab — Status', desc: 'Job statuses: Not Started, In progress, Pending, Sent, GB Review, Lost. Sent and Lost jobs are sorted to the bottom under a "✓ Sent / Closed" separator, same as in Deal Flow.' },
+        { label: 'Calendar', desc: 'Month-by-month calendar showing all jobs with planning dates. Each job appears as a coloured block spanning its start–end range. Weekends are excluded. Navigate with the month arrows at the top.' },
+        { label: 'Project Gantt', desc: 'Horizontal Gantt organised by project (job). Each bar shows the planning window. Drag the centre of a bar to shift the entire engagement. Drag the dark left edge to move only the start date; drag the dark right edge to move only the end date. The client name is shown inside the bar on every day it spans. Job bars link to the same planning dates shown in the Jobs table.' },
+        { label: 'Team Gantt', desc: '4-month Gantt organised by team member. Prev / Next navigation shifts all four months together. Drag bar centres to move an engagement; drag edges to resize. If dragging crosses a leave period, a modal asks whether to proceed. Hover a member row and click + to add a manual block (internal training, admin, etc.) stored separately from planning jobs.' },
+        { label: 'Leaves', desc: 'Record absences per member and type (Annual Leave, Sick, Public Holiday, Other). Leave periods appear as orange shading in all Gantt and Calendar views. When allocating or dragging a job over a leave period, the app shows a warning and asks for confirmation.' },
       ]
     },
     {
       id: 'meeting',
       icon: '👥',
       title: 'Monday Meeting',
-      summary: 'A structured step-through tool to run the weekly team meeting efficiently.',
+      summary: 'A structured step-through tool for running the weekly team meeting.',
       items: [
-        { label: 'Agenda', desc: 'Built automatically from active Deal Flow missions, inDealFlow jobs, and any events. The start screen shows the item count by category before you begin.' },
-        { label: 'Step-through', desc: 'Navigate one agenda item at a time using Previous / Next. Update the status and add comments directly during the meeting — changes save to Firebase in real time.' },
-        { label: 'Overview panel', desc: 'The right-hand column lists every agenda item. Items already reviewed are ticked off in grey. Click any item to jump directly to it without stepping through the ones in between.' },
-        { label: 'Meeting notes', desc: 'A local-only note field per item for temporary reminders or action points you do not want stored permanently in the database.' },
-        { label: 'Events', desc: 'One-off agenda items added outside of missions and jobs (e.g. a client call, an internal deadline). Events are dismissed and removed from the list during the meeting.' },
+        { label: 'Agenda building', desc: 'The agenda is built automatically each time you open Monday Meeting. It includes: all active Deal Flow missions (Not Started, In progress, Pending, Review, GB & SC Review), any Planning jobs marked as "In Deal Flow", and any events scheduled in the Events tab. Sent and Lost items are excluded.' },
+        { label: 'Start screen', desc: 'Before stepping through, a summary shows how many missions, jobs, and events are on the agenda. Click "Start Meeting" to begin.' },
+        { label: 'Step-through', desc: 'Navigate item by item using Previous / Next. For each item you can update its status inline (dropdown) and add or edit comments — changes are saved to Firebase in real time and visible to the rest of the team immediately.' },
+        { label: 'Overview panel', desc: 'The right-hand panel lists every agenda item with a ▶ (current), ✓ (done), or number (upcoming) indicator. Click any item in the list to jump directly to it without stepping through sequentially.' },
+        { label: 'Events in the agenda', desc: 'Events (added via Planning → Events or Settings → Events) appear as standalone agenda items. During the meeting you can dismiss an event (removes it from Firebase) or skip it.' },
+        { label: 'End of meeting', desc: 'After the last item you see a completion screen. All status and comment changes made during the session are already saved — no separate save action needed.' },
+      ]
+    },
+    {
+      id: 'events',
+      icon: '📆',
+      title: 'Events',
+      summary: 'One-off calendar events that appear in the Monday Meeting agenda.',
+      items: [
+        { label: 'What is an event', desc: 'An event is a one-time occurrence outside the normal mission/job pipeline — a client presentation, a conference, an internal deadline, a team offsite, etc.' },
+        { label: 'Fields', desc: 'Event name (required), Date, Location, and Comments. All fields except the name are optional.' },
+        { label: 'Monday Meeting', desc: 'Events are automatically included in the Monday Meeting agenda on the date of the meeting. During the meeting you can dismiss an event (permanently deletes it) once it has been discussed.' },
+        { label: 'Adding events', desc: 'Click "+ Add event" in the Events tab (accessible from Planning). Events are stored in Firebase and visible to the whole team immediately.' },
       ]
     },
     {
@@ -2829,10 +2870,13 @@ function Guidelines() {
       title: 'Settings',
       summary: 'Manage team members and configure app-level behaviour.',
       items: [
-        { label: 'Add team member', desc: 'Enter a full name, initials (up to 3 characters), and a colour. The member appears immediately in all planning, allocation, and Deal Flow views.' },
-        { label: 'Active / Inactive', desc: 'Toggle a member inactive to hide them from planning views without deleting their history. Inactive members still appear in historical data and member project history.' },
-        { label: 'Email notifications', desc: 'Powered by EmailJS. Sends a team summary email when triggered from the Settings page. Configure your EmailJS service ID and template in the source if needed.' },
-        { label: 'Clear data', desc: 'Danger-zone buttons to permanently wipe specific Firebase collections (jobs, missions, events, etc.). This action cannot be undone — use with care.' },
+        { label: 'Add team member', desc: 'Enter a full name, initials (up to 3 characters), and a colour. The member appears immediately in all planning, allocation, Deal Flow, and worker picker views.' },
+        { label: 'Active members', desc: 'Active members appear everywhere: utilization bars, Calendar, Project Gantt, Team Gantt, Leaves tab, and worker pickers. They are tracked for capacity.' },
+        { label: 'Inactive members', desc: 'Toggling a member inactive hides them from all capacity views (utilization, Calendar, Gantt, Leaves) but keeps all their historical data. They still appear in historical KPIs and member project history.' },
+        { label: 'Allocation-only members (Geoffrey, Samuel)', desc: 'These partners have a special allocationOnly flag. They appear in all worker pickers and "Assign to" buttons so they can be associated with missions and jobs. However they are completely excluded from utilization bars, Calendar, Team Gantt, and Leaves — their capacity is not tracked by the tool.' },
+        { label: 'Email notifications', desc: 'Powered by EmailJS. Sends a team summary email when triggered from the Settings page. Requires an EmailJS service ID and template to be configured in the source.' },
+        { label: 'Clear data', desc: 'Danger-zone buttons to permanently wipe specific Firebase collections (jobs, missions, bizdev, events). This cannot be undone. Use only to reset test data or perform a clean migration.' },
+        { label: 'Firebase status', desc: 'Shows the live connection status to the Firebase Realtime Database (project: haca-cf-dealflow, Europe West region). All reads and writes happen in real time — no page refresh needed.' },
       ]
     },
   ];
@@ -2855,10 +2899,12 @@ function Guidelines() {
         </p>
         <div className="mt-5 grid grid-cols-2 gap-3">
           {[
-            { icon:'📊', label:'Dashboard',       desc:'Team overview & KPIs' },
-            { icon:'💼', label:'Deal Flow',        desc:'Pipeline & mandates' },
-            { icon:'📅', label:'Planning',         desc:'Allocation & Gantt views' },
-            { icon:'👥', label:'Monday Meeting',   desc:'Weekly agenda tool' },
+            { icon:'📊', label:'Dashboard',           desc:'Team overview & KPIs' },
+            { icon:'💼', label:'Deal Flow',            desc:'Pipeline & mandates' },
+            { icon:'🤝', label:'Business Development', desc:'Offers, pipe & win rate' },
+            { icon:'📅', label:'Planning',             desc:'Allocation & Gantt views' },
+            { icon:'👥', label:'Monday Meeting',       desc:'Weekly agenda tool' },
+            { icon:'📆', label:'Events',               desc:'One-off agenda items' },
           ].map(s => (
             <div key={s.label} className="bg-white/10 rounded-lg px-3 py-2.5">
               <p className="text-sm font-semibold">{s.icon} {s.label}</p>
