@@ -1615,6 +1615,8 @@ function TeamGanttActive({ activeTeam }) {
 
   const saveBlock = () => {
     if (!blockModal.label.trim() || !blockModal.start || !blockModal.end) return;
+    const conflicts = checkLeaveConflicts([blockModal.member], blockModal.start, blockModal.end, leaves);
+    if (!confirmLeaveConflicts(conflicts)) return;
     if (blockModal.mode === 'edit') {
       dbUpdate('ganttBlocks', blockModal.id, { member: blockModal.member, start: blockModal.start, end: blockModal.end, label: blockModal.label, color: blockModal.color });
     } else {
@@ -1880,19 +1882,27 @@ function UnallocatedJobs({ activeTeam }) {
             <div className="flex-1">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Assign to</p>
               <div className="flex flex-wrap gap-2">
-                {activeTeam.map(m => (
+                {activeTeam.map(m => {
+                  const hasLeave = f.planningStart && f.planningEnd &&
+                    checkLeaveConflicts([m.name], f.planningStart, f.planningEnd, leaves).length > 0;
+                  const selected = f.workers.includes(m.name);
+                  return (
                   <button key={m.name} onClick={() => toggleWorker(job.id, m.name)}
-                    className={`flex-1 min-w-[80px] py-2 rounded-xl text-xs font-semibold border-2 transition-all ${f.workers.includes(m.name)
+                    className={`flex-1 min-w-[80px] py-2 rounded-xl text-xs font-semibold border-2 transition-all ${selected
                       ? 'border-transparent text-white shadow-sm'
-                      : 'border-gray-200 text-gray-500 hover:border-gray-300 bg-white'}`}
-                    style={f.workers.includes(m.name) ? {background: m.color} : {}}>
+                      : hasLeave
+                        ? 'border-orange-300 bg-orange-50 text-gray-500 hover:border-orange-400'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-300 bg-white'}`}
+                    style={selected ? {background: m.color} : {}}>
                     <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold mx-auto mb-1"
-                      style={{background: f.workers.includes(m.name) ? 'rgba(255,255,255,0.3)' : m.color}}>
+                      style={{background: selected ? 'rgba(255,255,255,0.3)' : m.color}}>
                       {m.initials}
                     </span>
                     {m.name}
+                    {hasLeave && <span className="block text-[9px] text-orange-500 mt-0.5">🏖 on leave</span>}
                   </button>
-                ))}
+                  );
+                })}
               </div>
               {activeTeam.length === 0 && (
                 <p className="text-xs text-gray-400 italic">No active members — set them in Settings.</p>
