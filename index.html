@@ -1158,6 +1158,7 @@ function GanttChart() {
   const [modal, setModal]             = useState(null);
   const [form,  setForm]              = useState({});
   const [draggingJobId, setDraggingJobId] = useState(null);
+  const [pendingDrag, setPendingDrag]     = useState(null);
   const dragInfoRef = useRef(null);
 
   const base = new Date(2026, monthOffset, 1);
@@ -1222,17 +1223,19 @@ function GanttChart() {
     const di = dragInfoRef.current;
     if (!di) return;
     const job = jobsWithDates.find(j => j.id === di.jobId);
-    if (!job) { dragInfoRef.current=null; setDraggingJobId(null); return; }
-    const delta = targetDay - di.originDay;
-    if (delta !== 0) {
-      const newStart = addDaysStr(job.planningStart, delta);
-      const newEnd   = addDaysStr(job.planningEnd, delta);
-      const conflicts = checkLeaveConflicts(job.workers, newStart, newEnd, leaves);
-      if (!confirmLeaveConflicts(conflicts)) { dragInfoRef.current=null; setDraggingJobId(null); return; }
-      dbUpdate('jobs', job.id, { planningStart: newStart, planningEnd: newEnd });
-    }
     dragInfoRef.current = null;
     setDraggingJobId(null);
+    if (!job) return;
+    const delta = targetDay - di.originDay;
+    if (delta === 0) return;
+    const newStart = addDaysStr(job.planningStart, delta);
+    const newEnd   = addDaysStr(job.planningEnd, delta);
+    const conflicts = checkLeaveConflicts(job.workers, newStart, newEnd, leaves);
+    if (conflicts.length > 0) {
+      setPendingDrag({ job, newStart, newEnd, conflicts });
+    } else {
+      dbUpdate('jobs', job.id, { planningStart: newStart, planningEnd: newEnd });
+    }
   };
 
   return (
@@ -1349,6 +1352,33 @@ function GanttChart() {
           <div className="flex justify-end gap-2 mt-5">
             <button onClick={()=>setModal(null)} className="px-3 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
             <button onClick={save} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Save</button>
+          </div>
+        </Modal>
+      )}
+
+      {pendingDrag && (
+        <Modal title="⚠️ Leave conflict" onClose={() => setPendingDrag(null)}>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">The following team members are on leave during this period:</p>
+            <div className="space-y-2">
+              {pendingDrag.conflicts.map((c,i) => (
+                <div key={i} className="flex items-center gap-3 bg-orange-50 rounded-xl px-3 py-2.5">
+                  <span className="text-xl">🏖</span>
+                  <div>
+                    <p className="text-sm font-semibold">{c.worker}</p>
+                    <p className="text-xs text-gray-500">{c.start} → {c.end} · {c.type}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-gray-500">Do you still want to plan them during this period?</p>
+            <div className="flex gap-2 justify-end pt-2">
+              <button onClick={() => setPendingDrag(null)} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+              <button onClick={() => { dbUpdate('jobs', pendingDrag.job.id, { planningStart: pendingDrag.newStart, planningEnd: pendingDrag.newEnd }); setPendingDrag(null); }}
+                className="px-4 py-2 text-sm rounded-lg bg-orange-500 text-white hover:bg-orange-600 font-medium">
+                Plan anyway
+              </button>
+            </div>
           </div>
         </Modal>
       )}
@@ -1538,6 +1568,7 @@ function TeamGanttActive({ activeTeam }) {
   const [monthOffset, setMonthOffset]   = useState(new Date().getMonth());
   const [draggingJobId, setDraggingJobId] = useState(null);
   const [blockModal, setBlockModal]       = useState(null);
+  const [pendingDrag, setPendingDrag]     = useState(null);
   const dragInfoRef = useRef(null);
 
   const base = new Date(2026, monthOffset, 1);
@@ -1594,17 +1625,19 @@ function TeamGanttActive({ activeTeam }) {
     const di = dragInfoRef.current;
     if (!di) return;
     const job = jobsWithDates.find(j => j.id === di.jobId);
-    if (!job || !(job.workers||[]).includes(member.name)) { dragInfoRef.current=null; setDraggingJobId(null); return; }
-    const delta = targetDay - di.originDay;
-    if (delta !== 0) {
-      const newStart = addDaysStr(job.planningStart, delta);
-      const newEnd   = addDaysStr(job.planningEnd, delta);
-      const conflicts = checkLeaveConflicts(job.workers, newStart, newEnd, leaves);
-      if (!confirmLeaveConflicts(conflicts)) { dragInfoRef.current=null; setDraggingJobId(null); return; }
-      dbUpdate('jobs', job.id, { planningStart: newStart, planningEnd: newEnd });
-    }
     dragInfoRef.current = null;
     setDraggingJobId(null);
+    if (!job || !(job.workers||[]).includes(member.name)) return;
+    const delta = targetDay - di.originDay;
+    if (delta === 0) return;
+    const newStart = addDaysStr(job.planningStart, delta);
+    const newEnd   = addDaysStr(job.planningEnd, delta);
+    const conflicts = checkLeaveConflicts(job.workers, newStart, newEnd, leaves);
+    if (conflicts.length > 0) {
+      setPendingDrag({ job, newStart, newEnd, conflicts });
+    } else {
+      dbUpdate('jobs', job.id, { planningStart: newStart, planningEnd: newEnd });
+    }
   };
 
   const openAddBlock = (member) => {
@@ -1783,6 +1816,33 @@ function TeamGanttActive({ activeTeam }) {
                   {blockModal.mode==='add'?'Add block':'Save'}
                 </button>
               </div>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {pendingDrag && (
+        <Modal title="⚠️ Leave conflict" onClose={() => setPendingDrag(null)}>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">The following team members are on leave during this period:</p>
+            <div className="space-y-2">
+              {pendingDrag.conflicts.map((c,i) => (
+                <div key={i} className="flex items-center gap-3 bg-orange-50 rounded-xl px-3 py-2.5">
+                  <span className="text-xl">🏖</span>
+                  <div>
+                    <p className="text-sm font-semibold">{c.worker}</p>
+                    <p className="text-xs text-gray-500">{c.start} → {c.end} · {c.type}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-gray-500">Do you still want to plan them during this period?</p>
+            <div className="flex gap-2 justify-end pt-2">
+              <button onClick={() => setPendingDrag(null)} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+              <button onClick={() => { dbUpdate('jobs', pendingDrag.job.id, { planningStart: pendingDrag.newStart, planningEnd: pendingDrag.newEnd }); setPendingDrag(null); }}
+                className="px-4 py-2 text-sm rounded-lg bg-orange-500 text-white hover:bg-orange-600 font-medium">
+                Plan anyway
+              </button>
             </div>
           </div>
         </Modal>
