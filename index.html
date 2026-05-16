@@ -1109,8 +1109,14 @@ function JobsTable() {
                   <td className="px-4 py-2.5 text-gray-500">{j.assets}</td>
                   <td className="px-4 py-2.5 text-gray-500 max-w-[140px] truncate">{j.methodology||j.scope}</td>
                   <td className="px-4 py-2.5 text-gray-500">{j.numDays ? `${j.numDays}${j.effortUnit==='hours'?'h':'d'}` : '—'}</td>
-                  <td className="px-4 py-2.5 text-gray-500 text-xs whitespace-nowrap">
-                    {j.planningStart&&j.planningEnd?`${j.planningStart.slice(5)} → ${j.planningEnd.slice(5)}`:j.planningStart?j.planningStart.slice(5):'—'}
+                  <td className="px-4 py-2.5 text-xs whitespace-nowrap">
+                    {j.planningStart && j.planningEnd
+                      ? <span className="text-gray-500">{j.planningStart.slice(5)} → {j.planningEnd.slice(5)}</span>
+                      : j.planningStart
+                        ? <span className="text-gray-500">{j.planningStart.slice(5)}</span>
+                        : j.workers?.length
+                          ? <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold bg-orange-100 text-orange-600">⚠️ Add dates</span>
+                          : <span className="text-gray-300">—</span>}
                   </td>
                   <td className="px-4 py-2.5"><Badge s={j.status} /></td>
                   <td className="px-4 py-2.5">
@@ -1990,10 +1996,8 @@ function UnallocatedJobs({ activeTeam }) {
   const { items: teamMembers } = useRTDB('team');
   const [forms, setForms] = useState({});
 
-  // Planning jobs not yet fully allocated
-  const unallocated = jobs.filter(j =>
-    !j.workers?.length || !j.planningStart || !j.planningEnd
-  );
+  // Planning jobs with no workers assigned at all
+  const unallocated = jobs.filter(j => !j.workers?.length);
 
   // Deal Flow missions with no workers assigned — shown here as a reminder
   const DONE_STATUSES_M = ['Sent', 'Lost'];
@@ -2031,7 +2035,26 @@ function UnallocatedJobs({ activeTeam }) {
   const allocateMission = mission => {
     const f = getForm(mission.id);
     if (!f.workers.length) { alert('Select at least one team member'); return; }
+    // Update mission workers in Deal Flow
     dbUpdate('missions', mission.id, { workers: f.workers });
+    // Create a Planning job (no dates yet — shows disclaimer in Jobs tab)
+    const newId = `j${Date.now()}`;
+    dbSet('jobs', newId, {
+      id: newId,
+      client: mission.client,
+      type: mission.type || '',
+      workers: f.workers,
+      status: 'Not Started',
+      planningStart: '',
+      planningEnd: '',
+      numDays: '',
+      effortUnit: 'days',
+      signOff: mission.deadline || '',
+      assets: '',
+      methodology: mission.mission || '',
+      scope: '',
+      fromMissionId: mission.id,
+    });
     setForms(prev => { const n={...prev}; delete n[mission.id]; return n; });
   };
 
@@ -2477,7 +2500,7 @@ function AllocationPage() {
 
   const activeTeam = teamMembers.filter(m => m.active);
   const DONE_STATUSES_M  = ['Sent', 'Lost'];
-  const unallocatedCount = jobs.filter(j => !j.workers?.length || !j.planningStart || !j.planningEnd).length
+  const unallocatedCount = jobs.filter(j => !j.workers?.length).length
     + missions.filter(m => !m.workers?.length && !DONE_STATUSES_M.includes(m.status)).length;
 
   const TABS = ['Not Allocated', 'Calendar', 'Jobs', 'Project Gantt', 'Team Gantt', 'Leaves'];
