@@ -137,7 +137,7 @@ function Sidebar({ page, setPage }) {
     { id:'dealflow',   label:'💼 Deal Flow' },
     { id:'planning',   label:'📅 Planning' },
     { id:'meeting',    label:'👥 Monday Meeting' },
-    { id:'assistant',  label:'💬 Assistant' },
+    { id:'assistant',  label:'💬 Assistant (Beta)' },
     { id:'guidelines', label:'📖 Guidelines' },
     { id:'settings',   label:'⚙️ Settings' },
   ];
@@ -2646,7 +2646,7 @@ function ChatAssistant() {
   const [messages,     setMessages]     = React.useState([]);
   const [input,        setInput]        = React.useState('');
   const [loading,      setLoading]      = React.useState(false);
-  const [apiKey,       setApiKey]       = React.useState(() => localStorage.getItem('haca_claude_key') || '');
+  const [apiKey,       setApiKey]       = React.useState(() => localStorage.getItem('haca_gemini_key') || '');
   const [keyDraft,     setKeyDraft]     = React.useState('');
   const [showKeyPanel, setShowKeyPanel] = React.useState(false);
   const bottomRef = React.useRef(null);
@@ -2720,27 +2720,28 @@ Answer questions about how to use the tool AND about specific projects, people, 
     setLoading(true);
 
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-request-allowed': 'true',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1024,
-          system: buildSystem(),
-          messages: history.map(m => ({ role: m.role, content: m.content })),
-        }),
-      });
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: buildSystem() }] },
+            contents: history.map(m => ({
+              role: m.role === 'assistant' ? 'model' : 'user',
+              parts: [{ text: m.content }],
+            })),
+            generationConfig: { maxOutputTokens: 1024 },
+          }),
+        }
+      );
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
         throw new Error(e.error?.message || `HTTP ${res.status}`);
       }
       const data = await res.json();
-      setMessages(prev => [...prev, { role: 'assistant', content: data.content[0].text }]);
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '(no response)';
+      setMessages(prev => [...prev, { role: 'assistant', content: text }]);
     } catch (err) {
       setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ ${err.message}` }]);
     } finally {
@@ -2763,7 +2764,7 @@ Answer questions about how to use the tool AND about specific projects, people, 
       {/* Header */}
       <div className="flex items-center justify-between mb-4 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold">Assistant</h1>
+          <h1 className="text-2xl font-bold">Assistant <span className="text-sm font-normal text-gray-400 ml-1">Beta</span></h1>
           <p className="text-sm text-gray-500">Ask about the tool or any project, mission, or team member</p>
         </div>
         <button onClick={() => { setKeyDraft(apiKey); setShowKeyPanel(s=>!s); }}
@@ -2778,13 +2779,13 @@ Answer questions about how to use the tool AND about specific projects, people, 
         <div className="mb-4 shrink-0 bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
           <div>
             <p className="text-sm font-semibold text-amber-800">Claude API key</p>
-            <p className="text-xs text-amber-600 mt-0.5">Stored only in this browser. Get a key at <span className="font-mono">console.anthropic.com</span>. The key is never sent anywhere except directly to Anthropic.</p>
+            <p className="text-xs text-amber-600 mt-0.5">Free — no credit card needed. Get a key at <span className="font-mono">aistudio.google.com</span> → Get API key. Stored only in this browser.</p>
           </div>
           <div className="flex gap-2">
-            <input type="password" className={inp+' flex-1 font-mono text-sm'} placeholder="sk-ant-api03-…"
+            <input type="password" className={inp+' flex-1 font-mono text-sm'} placeholder="AIza…"
               value={keyDraft} onChange={e => setKeyDraft(e.target.value)}
-              onKeyDown={e => { if(e.key==='Enter') { localStorage.setItem('haca_claude_key', keyDraft); setApiKey(keyDraft); setShowKeyPanel(false); }}} />
-            <button onClick={() => { localStorage.setItem('haca_claude_key', keyDraft); setApiKey(keyDraft); setShowKeyPanel(false); }}
+              onKeyDown={e => { if(e.key==='Enter') { localStorage.setItem('haca_gemini_key', keyDraft); setApiKey(keyDraft); setShowKeyPanel(false); }}} />
+            <button onClick={() => { localStorage.setItem('haca_gemini_key', keyDraft); setApiKey(keyDraft); setShowKeyPanel(false); }}
               className="px-4 py-2 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 font-medium shrink-0">Save</button>
           </div>
         </div>
