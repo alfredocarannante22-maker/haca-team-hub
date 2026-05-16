@@ -168,6 +168,7 @@ function Dashboard() {
   const { items: leaves }      = useRTDB('leaves');
   const { items: teamMembers } = useRTDB('team');
   const [showHistory, setShowHistory] = useState(false);
+  const [showMemberHistory, setShowMemberHistory] = useState(false);
 
   const activeTeam = useMemo(() => teamMembers.filter(m => m.active), [teamMembers]);
 
@@ -506,6 +507,71 @@ function Dashboard() {
                 ))}
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Member project history */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <button onClick={() => setShowMemberHistory(h => !h)} className="flex items-center justify-between w-full">
+          <div>
+            <h2 className="font-semibold text-left">👤 Member project history</h2>
+            <p className="text-xs text-gray-400 mt-0.5 text-left">All missions and jobs each team member has been assigned to</p>
+          </div>
+          <span className="text-gray-400 text-xs">{showMemberHistory ? '▲' : '▼'}</span>
+        </button>
+        {showMemberHistory && (
+          <div className="mt-3 border-t pt-3 space-y-5">
+            {activeTeam.length === 0 && <p className="text-sm text-gray-400">No active team members.</p>}
+            {activeTeam.map(member => {
+              const mMissions = missions.filter(m => (m.workers||[]).includes(member.name))
+                .sort((a,b) => (b.deadline||'') > (a.deadline||'') ? 1 : -1);
+              const mJobs = jobs.filter(j => (j.workers||[]).includes(member.name))
+                .sort((a,b) => (b.planningStart||'') > (a.planningStart||'') ? 1 : -1);
+              const total = mMissions.length + mJobs.length;
+              return (
+                <div key={member.id}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                      style={{background: member.color}}>{member.initials}</div>
+                    <span className="font-semibold text-sm">{member.name}</span>
+                    <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5">{total} project{total!==1?'s':''}</span>
+                  </div>
+                  {total === 0 ? (
+                    <p className="text-xs text-gray-400 pl-9">No projects assigned yet.</p>
+                  ) : (
+                    <div className="pl-9">
+                      {mMissions.length > 0 && (
+                        <div className="mb-3">
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Missions ({mMissions.length})</p>
+                          {mMissions.map(m => (
+                            <div key={m.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0">
+                              <span className="text-sm font-medium flex-1 truncate">{m.client}</span>
+                              <span className="text-xs text-gray-400">{m.mission||'—'}</span>
+                              {m.deadline && <span className="text-xs text-gray-400 shrink-0">{m.deadline}</span>}
+                              <Badge s={m.status} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {mJobs.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Jobs ({mJobs.length})</p>
+                          {mJobs.map(j => (
+                            <div key={j.id} className="flex items-center gap-2 py-1.5 border-b border-gray-50 last:border-0">
+                              <span className="text-sm font-medium flex-1 truncate">{j.client}</span>
+                              <span className="text-xs text-gray-400">{j.type||'—'}</span>
+                              {j.planningStart && <span className="text-xs text-gray-400 shrink-0">{j.planningStart} → {j.planningEnd}</span>}
+                              <Badge s={j.status} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1166,6 +1232,7 @@ function GanttChart() {
    TEAM GANTT
    ================================================================ */
 const PROJECT_COLORS = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#6366f1','#14b8a6','#f97316','#ec4899','#06b6d4','#84cc16','#a855f7'];
+const GANTT_BLOCK_COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#ec4899','#06b6d4'];
 
 function TeamGantt() {
   const { items:jobs }        = useRTDB('jobs');
@@ -1316,9 +1383,13 @@ function JobsPage() {
    TEAM GANTT — ACTIVE MEMBERS ONLY (used in Planning → Team Gantt tab)
    ================================================================ */
 function TeamGanttActive({ activeTeam }) {
-  const { items: jobs }   = useRTDB('jobs');
-  const { items: leaves } = useRTDB('leaves');
-  const [monthOffset, setMonthOffset] = useState(new Date().getMonth());
+  const { items: jobs }        = useRTDB('jobs');
+  const { items: leaves }      = useRTDB('leaves');
+  const { items: ganttBlocks } = useRTDB('ganttBlocks');
+  const [monthOffset, setMonthOffset]   = useState(new Date().getMonth());
+  const [draggingJobId, setDraggingJobId] = useState(null);
+  const [blockModal, setBlockModal]       = useState(null);
+  const dragInfoRef = useRef(null);
 
   const base = new Date(2026, monthOffset, 1);
   const year  = base.getFullYear();
@@ -1336,10 +1407,10 @@ function TeamGanttActive({ activeTeam }) {
     return map;
   }, [jobsWithDates]);
 
-  const inRange = (job, day) => {
+  const inRange = (start, end, day) => {
     const d = new Date(year, month, day);
-    const s = new Date(job.planningStart); s.setHours(0,0,0,0);
-    const e = new Date(job.planningEnd);   e.setHours(23,59,59,999);
+    const s = new Date(start); s.setHours(0,0,0,0);
+    const e = new Date(end);   e.setHours(23,59,59,999);
     return d >= s && d <= e;
   };
 
@@ -1352,7 +1423,56 @@ function TeamGanttActive({ activeTeam }) {
       .some(l => d >= new Date(l.start) && d <= new Date(l.end));
   };
 
-  const activeNames = activeTeam.map(m => m.name);
+  const addDaysStr = (dateStr, n) => {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0,10);
+  };
+
+  const handleJobDragStart = (e, job, day) => {
+    dragInfoRef.current = { jobId: job.id, originDay: day };
+    setDraggingJobId(job.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleJobDragEnd = () => {
+    setDraggingJobId(null);
+    dragInfoRef.current = null;
+  };
+
+  const handleDropOnCell = (e, member, targetDay) => {
+    e.preventDefault();
+    const di = dragInfoRef.current;
+    if (!di) return;
+    const job = jobsWithDates.find(j => j.id === di.jobId);
+    if (!job || !(job.workers||[]).includes(member.name)) { dragInfoRef.current=null; setDraggingJobId(null); return; }
+    const delta = targetDay - di.originDay;
+    if (delta !== 0) {
+      dbUpdate('jobs', job.id, {
+        planningStart: addDaysStr(job.planningStart, delta),
+        planningEnd:   addDaysStr(job.planningEnd, delta),
+      });
+    }
+    dragInfoRef.current = null;
+    setDraggingJobId(null);
+  };
+
+  const openAddBlock = (member) => {
+    const today = new Date();
+    const dateStr = today.toISOString().slice(0,10);
+    setBlockModal({ mode:'add', member: member.name, start: dateStr, end: dateStr, label: '', color: GANTT_BLOCK_COLORS[0] });
+  };
+
+  const saveBlock = () => {
+    if (!blockModal.label.trim() || !blockModal.start || !blockModal.end) return;
+    if (blockModal.mode === 'edit') {
+      dbUpdate('ganttBlocks', blockModal.id, { member: blockModal.member, start: blockModal.start, end: blockModal.end, label: blockModal.label, color: blockModal.color });
+    } else {
+      const id = `gb${Date.now()}`;
+      dbSet('ganttBlocks', id, { id, member: blockModal.member, start: blockModal.start, end: blockModal.end, label: blockModal.label, color: blockModal.color });
+    }
+    setBlockModal(null);
+  };
 
   if (activeTeam.length === 0) return (
     <div className="text-center py-12 bg-white rounded-xl border border-gray-100">
@@ -1369,10 +1489,9 @@ function TeamGanttActive({ activeTeam }) {
       </div>
 
       <div className="overflow-x-auto">
-        <div style={{minWidth: Math.max(900, daysInMonth*34+200)+'px'}}>
-          {/* Header */}
+        <div style={{minWidth: Math.max(900, daysInMonth*34+220)+'px'}}>
           <div className="flex border-b bg-gray-50 sticky top-0 z-10">
-            <div className="w-48 shrink-0 border-r px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">Member</div>
+            <div className="w-52 shrink-0 border-r px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">Member</div>
             {days.map(d=>(
               <div key={d} style={{minWidth:34}} className={`flex-1 text-center border-r last:border-0 py-1.5 ${isToday(d)?'bg-blue-50':isWeekend(d)?'bg-gray-50/60':''}`}>
                 <div className={`text-xs font-semibold ${isToday(d)?'text-blue-600':isWeekend(d)?'text-gray-300':'text-gray-400'}`}>{d}</div>
@@ -1381,25 +1500,34 @@ function TeamGanttActive({ activeTeam }) {
             ))}
           </div>
 
-          {/* Active members only */}
           {activeTeam.map(member => {
-            const mJobs = jobsWithDates.filter(j => (j.workers||[]).includes(member.name));
+            const mJobs   = jobsWithDates.filter(j => (j.workers||[]).includes(member.name));
+            const mBlocks = ganttBlocks.filter(b => b.member === member.name);
             return (
-              <div key={member.id} className="flex border-b last:border-0 hover:bg-blue-50/20" style={{minHeight:44}}>
-                <div className="w-48 shrink-0 border-r px-3 flex items-center gap-2">
+              <div key={member.id} className="flex border-b last:border-0 hover:bg-blue-50/20 group" style={{minHeight:48}}>
+                <div className="w-52 shrink-0 border-r px-3 flex items-center gap-2">
                   <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
                     style={{background: member.color}}>
                     {member.initials}
                   </div>
-                  <span className="text-sm font-medium text-gray-700 truncate">{member.name}</span>
+                  <span className="text-sm font-medium text-gray-700 truncate flex-1">{member.name}</span>
+                  <button
+                    onClick={() => openAddBlock(member)}
+                    title="Add manual block"
+                    className="opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 rounded-full bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-600 text-xs flex items-center justify-center shrink-0">
+                    +
+                  </button>
                 </div>
                 <div className="flex flex-1">
                   {days.map(d => {
-                    const wknd   = isWeekend(d);
-                    const active = wknd ? [] : mJobs.filter(j => inRange(j, d));
+                    const wknd    = isWeekend(d);
+                    const active  = wknd ? [] : mJobs.filter(j => inRange(j.planningStart, j.planningEnd, d));
+                    const blocks  = wknd ? [] : mBlocks.filter(b => b.start && b.end && inRange(b.start, b.end, d));
                     const onLeave = !wknd && isOnLeave(member.name, d);
                     return (
                       <div key={d} style={{minWidth:34}}
+                        onDragOver={e => e.preventDefault()}
+                        onDrop={e => handleDropOnCell(e, member, d)}
                         className={`flex-1 border-r last:border-0 flex flex-col gap-0.5 py-1 px-0.5 ${isToday(d)?'bg-blue-50/60':wknd?'bg-gray-50':''}`}>
                         {onLeave && (
                           <div title="On leave"
@@ -1410,10 +1538,22 @@ function TeamGanttActive({ activeTeam }) {
                         )}
                         {!onLeave && active.map(j => (
                           <div key={j.id}
-                            title={`${j.client}${j.numDays?' — '+j.numDays+(j.effortUnit==='hours'?'h':'d'):''}\n${j.planningStart} → ${j.planningEnd}`}
-                            className="h-5 rounded text-white text-[9px] font-semibold flex items-center px-1 overflow-hidden cursor-default select-none"
-                            style={{background: clientColorMap[j.client]||'#3b82f6'}}>
+                            draggable
+                            onDragStart={e => handleJobDragStart(e, j, d)}
+                            onDragEnd={handleJobDragEnd}
+                            title={`${j.client}${j.numDays?' — '+j.numDays+(j.effortUnit==='hours'?'h':'d'):''}\n${j.planningStart} → ${j.planningEnd}\nDrag to shift dates`}
+                            className="h-5 rounded text-white text-[9px] font-semibold flex items-center px-1 overflow-hidden cursor-grab active:cursor-grabbing select-none"
+                            style={{background: clientColorMap[j.client]||'#3b82f6', opacity: draggingJobId===j.id ? 0.4 : 0.9}}>
                             {j.client.length>6?j.client.slice(0,6)+'…':j.client}
+                          </div>
+                        ))}
+                        {blocks.map(b => (
+                          <div key={b.id}
+                            title={b.label}
+                            onClick={() => setBlockModal({mode:'edit', id:b.id, member:b.member, start:b.start, end:b.end, label:b.label, color:b.color})}
+                            className="h-5 rounded text-white text-[9px] font-semibold flex items-center px-1 overflow-hidden cursor-pointer select-none"
+                            style={{background: b.color||'#6366f1', opacity:0.85, outline:'1.5px dashed rgba(255,255,255,0.6)', outlineOffset:'-1px'}}>
+                            {(b.label||'').length>6?(b.label||'').slice(0,6)+'…':(b.label||'')}
                           </div>
                         ))}
                       </div>
@@ -1437,6 +1577,63 @@ function TeamGanttActive({ activeTeam }) {
             ))}
           </div>
         </div>
+      )}
+      <div className="px-4 py-2 border-t bg-gray-50">
+        <p className="text-xs text-gray-400">💡 Drag a project bar to shift its dates · Hover a member and click <strong>+</strong> to add a manual block · Click a block to edit or delete</p>
+      </div>
+
+      {blockModal && (
+        <Modal title={blockModal.mode==='add'?'Add manual block':'Edit block'} onClose={()=>setBlockModal(null)}>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-gray-700">Member</label>
+              <p className="mt-0.5 text-sm text-gray-500">{blockModal.member}</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Label</label>
+              <input className={inp+' mt-1'} placeholder="e.g. Training, Internal work, Admin…"
+                value={blockModal.label}
+                onChange={e => setBlockModal(b => ({...b, label: e.target.value}))} />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700">Start date</label>
+                <input type="date" className={inp+' mt-1'} value={blockModal.start}
+                  onChange={e => setBlockModal(b => ({...b, start: e.target.value}))} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">End date</label>
+                <input type="date" className={inp+' mt-1'} value={blockModal.end}
+                  onChange={e => setBlockModal(b => ({...b, end: e.target.value}))} />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-2">Color</label>
+              <div className="flex gap-2">
+                {GANTT_BLOCK_COLORS.map(c => (
+                  <button key={c} type="button"
+                    onClick={() => setBlockModal(b => ({...b, color: c}))}
+                    className="w-7 h-7 rounded-full transition-transform hover:scale-110"
+                    style={{background:c, boxShadow: blockModal.color===c ? `0 0 0 3px white, 0 0 0 5px ${c}` : 'none'}} />
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              {blockModal.mode==='edit' && (
+                <button onClick={() => { if(window.confirm('Delete this block?')) { dbDelete('ganttBlocks', blockModal.id); setBlockModal(null); } }}
+                  className="px-3 py-1.5 text-sm rounded-lg text-red-600 hover:bg-red-50 border border-red-200">
+                  Delete
+                </button>
+              )}
+              <div className="flex gap-2 ml-auto">
+                <button onClick={() => setBlockModal(null)} className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                <button onClick={saveBlock} className="px-4 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+                  {blockModal.mode==='add'?'Add block':'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
