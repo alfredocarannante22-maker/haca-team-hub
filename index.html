@@ -991,6 +991,7 @@ const TYPE_COLORS  = {
 
 function JobsTable() {
   const { items, loading } = useRTDB('jobs');
+  const { items: leaves }  = useRTDB('leaves');
   const [typeFilter, setTypeFilter] = useState('All');
   const [modal, setModal] = useState(null);
   const [form,  setForm]  = useState({});
@@ -1008,6 +1009,8 @@ function JobsTable() {
 
   const save = () => {
     const item = { ...form, workers: Array.isArray(form.workers) ? form.workers : [] };
+    const conflicts = checkLeaveConflicts(item.workers, item.planningStart, item.planningEnd, leaves);
+    if (!confirmLeaveConflicts(conflicts)) return;
     if (!modal||modal==='add') { const id=`j${Date.now()}`; dbSet('jobs',id,{id,...item}); }
     else { dbUpdate('jobs',modal.id,item); }
     setModal(null);
@@ -1149,7 +1152,8 @@ function JobsTable() {
 }
 
 function GanttChart() {
-  const { items } = useRTDB('jobs');
+  const { items }         = useRTDB('jobs');
+  const { items: leaves } = useRTDB('leaves');
   const [monthOffset, setMonthOffset] = useState(new Date().getMonth());
   const [modal, setModal]             = useState(null);
   const [form,  setForm]              = useState({});
@@ -1199,6 +1203,8 @@ function GanttChart() {
 
   const save = () => {
     const item = { ...form, workers: Array.isArray(form.workers) ? form.workers : [] };
+    const conflicts = checkLeaveConflicts(item.workers, item.planningStart, item.planningEnd, leaves);
+    if (!confirmLeaveConflicts(conflicts)) return;
     if (!modal || modal === 'add') { const id=`j${Date.now()}`; dbSet('jobs',id,{id,...item}); }
     else { dbUpdate('jobs', modal.id, item); }
     setModal(null);
@@ -1219,10 +1225,11 @@ function GanttChart() {
     if (!job) { dragInfoRef.current=null; setDraggingJobId(null); return; }
     const delta = targetDay - di.originDay;
     if (delta !== 0) {
-      dbUpdate('jobs', job.id, {
-        planningStart: addDaysStr(job.planningStart, delta),
-        planningEnd:   addDaysStr(job.planningEnd, delta),
-      });
+      const newStart = addDaysStr(job.planningStart, delta);
+      const newEnd   = addDaysStr(job.planningEnd, delta);
+      const conflicts = checkLeaveConflicts(job.workers, newStart, newEnd, leaves);
+      if (!confirmLeaveConflicts(conflicts)) { dragInfoRef.current=null; setDraggingJobId(null); return; }
+      dbUpdate('jobs', job.id, { planningStart: newStart, planningEnd: newEnd });
     }
     dragInfoRef.current = null;
     setDraggingJobId(null);
@@ -1354,6 +1361,27 @@ function GanttChart() {
    ================================================================ */
 const PROJECT_COLORS = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#6366f1','#14b8a6','#f97316','#ec4899','#06b6d4','#84cc16','#a855f7'];
 const GANTT_BLOCK_COLORS = ['#6366f1','#f59e0b','#10b981','#ef4444','#ec4899','#06b6d4'];
+
+function checkLeaveConflicts(workers, planningStart, planningEnd, leaves) {
+  if (!planningStart || !planningEnd || !workers?.length) return [];
+  const s = new Date(planningStart); s.setHours(0,0,0,0);
+  const e = new Date(planningEnd);   e.setHours(23,59,59,999);
+  const conflicts = [];
+  (workers || []).forEach(name => {
+    leaves.filter(l => l.member === name && l.start && l.end).forEach(l => {
+      const ls = new Date(l.start); ls.setHours(0,0,0,0);
+      const le = new Date(l.end);   le.setHours(23,59,59,999);
+      if (s <= le && e >= ls) conflicts.push({ worker: name, start: l.start, end: l.end, type: l.type || 'Leave' });
+    });
+  });
+  return conflicts;
+}
+
+function confirmLeaveConflicts(conflicts) {
+  if (!conflicts.length) return true;
+  const lines = conflicts.map(c => `• ${c.worker}: on leave ${c.start} → ${c.end} (${c.type})`).join('\n');
+  return window.confirm(`⚠️ Leave conflict detected:\n\n${lines}\n\nThis person is on leave during the planned period.\nDo you want to plan them anyway?`);
+}
 
 function TeamGantt() {
   const { items:jobs }        = useRTDB('jobs');
@@ -1569,10 +1597,11 @@ function TeamGanttActive({ activeTeam }) {
     if (!job || !(job.workers||[]).includes(member.name)) { dragInfoRef.current=null; setDraggingJobId(null); return; }
     const delta = targetDay - di.originDay;
     if (delta !== 0) {
-      dbUpdate('jobs', job.id, {
-        planningStart: addDaysStr(job.planningStart, delta),
-        planningEnd:   addDaysStr(job.planningEnd, delta),
-      });
+      const newStart = addDaysStr(job.planningStart, delta);
+      const newEnd   = addDaysStr(job.planningEnd, delta);
+      const conflicts = checkLeaveConflicts(job.workers, newStart, newEnd, leaves);
+      if (!confirmLeaveConflicts(conflicts)) { dragInfoRef.current=null; setDraggingJobId(null); return; }
+      dbUpdate('jobs', job.id, { planningStart: newStart, planningEnd: newEnd });
     }
     dragInfoRef.current = null;
     setDraggingJobId(null);
@@ -1764,7 +1793,8 @@ function TeamGanttActive({ activeTeam }) {
    PLANNING — ALLOCATION PAGE
    ================================================================ */
 function UnallocatedJobs({ activeTeam }) {
-  const { items: jobs } = useRTDB('jobs');
+  const { items: jobs }   = useRTDB('jobs');
+  const { items: leaves } = useRTDB('leaves');
   const [forms, setForms] = useState({});
 
   const unallocated = jobs.filter(j =>
@@ -1785,6 +1815,8 @@ function UnallocatedJobs({ activeTeam }) {
     const f = getForm(job.id);
     if (!f.workers.length)            { alert('Select at least one team member'); return; }
     if (!f.planningStart || !f.planningEnd) { alert('Set planning start and end dates'); return; }
+    const conflicts = checkLeaveConflicts(f.workers, f.planningStart, f.planningEnd, leaves);
+    if (!confirmLeaveConflicts(conflicts)) return;
     dbUpdate('jobs', job.id, {
       workers: f.workers,
       planningStart: f.planningStart,
