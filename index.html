@@ -257,7 +257,11 @@ function Dashboard() {
     missionList.forEach(m => { if (m.type && c[m.type] !== undefined) c[m.type] = (c[m.type]||0)+1; });
     return JOB_TYPES.map(t => ({type:t, count:c[t]||0, color:TYPE_HEX[t]||'#9ca3af'})).filter(d=>d.count>0);
   };
-  const typeCounts    = useMemo(() => buildTypeCounts(jobs, missions), [jobs, missions]);
+  const DONE_S = ['Sent', 'Lost'];
+  const typeCounts    = useMemo(() => buildTypeCounts(
+    jobs.filter(j => !DONE_S.includes(j.status)),
+    missions.filter(m => !DONE_S.includes(m.status))
+  ), [jobs, missions]);
   const typeCountsAll = useMemo(() => buildTypeCounts(jobs, [...missions, ...prevFyMissions]), [jobs, missions, prevFyMissions]);
 
   // Upcoming deadlines (from both missions and jobs sign-off)
@@ -687,6 +691,8 @@ function MissionsTab() {
   const [filter,  setFilter]  = useState('All');
   const [modal,   setModal]   = useState(null);
   const [form,    setForm]    = useState({});
+  const [showActive, setShowActive] = useState(true);
+  const [showDone,   setShowDone]   = useState(false);
 
   // Jobs linked to Deal Flow, mapped to a mission-like shape
   const linkedJobs = jobs.filter(j => j.inDealFlow).map(j => ({
@@ -754,13 +760,24 @@ function MissionsTab() {
               <th className="px-4 py-3"></th>
             </tr></thead>
             <tbody>
-              {activeItems.map(m => <MissionRow key={m.id} m={m} inlineStatus={inlineStatus} openEdit={openEdit} />)}
+              <tr className="cursor-pointer select-none hover:bg-gray-50" onClick={() => setShowActive(v => !v)}>
+                <td colSpan={7} className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    {showActive ? '▼' : '▶'} &nbsp;Active pipeline — {activeItems.length}
+                  </span>
+                </td>
+              </tr>
+              {showActive && activeItems.map(m => <MissionRow key={m.id} m={m} inlineStatus={inlineStatus} openEdit={openEdit} />)}
               {doneItems.length > 0 && (
                 <>
-                  <tr><td colSpan={7} className="px-4 py-2 bg-gray-50 border-y border-gray-200">
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">✓ Sent / Closed — {doneItems.length}</span>
-                  </td></tr>
-                  {doneItems.map(m => <MissionRow key={m.id} m={m} inlineStatus={inlineStatus} openEdit={openEdit} done />)}
+                  <tr className="cursor-pointer select-none hover:bg-gray-50" onClick={() => setShowDone(v => !v)}>
+                    <td colSpan={7} className="px-4 py-2 bg-gray-50 border-y border-gray-200">
+                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                        {showDone ? '▼' : '▶'} &nbsp;✓ Sent / Closed — {doneItems.length}
+                      </span>
+                    </td>
+                  </tr>
+                  {showDone && doneItems.map(m => <MissionRow key={m.id} m={m} inlineStatus={inlineStatus} openEdit={openEdit} done />)}
                 </>
               )}
             </tbody>
