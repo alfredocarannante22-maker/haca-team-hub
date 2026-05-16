@@ -627,7 +627,7 @@ const MISSION_STATUSES = ['Not Started','In progress','Pending','Review','GB & S
 
 function WorkerPicker({ value, onChange }) {
   const { items: teamMembers } = useRTDB('team');
-  const active = teamMembers.filter(m => m.active);
+  const active = teamMembers.filter(m => m.active || m.allocationOnly);
   const selected = Array.isArray(value) ? value : [];
   const toggle = name => onChange(selected.includes(name) ? selected.filter(n=>n!==name) : [...selected, name]);
   return (
@@ -1984,13 +1984,25 @@ function TeamGanttActive({ activeTeam }) {
    PLANNING — ALLOCATION PAGE
    ================================================================ */
 function UnallocatedJobs({ activeTeam }) {
-  const { items: jobs }   = useRTDB('jobs');
-  const { items: leaves } = useRTDB('leaves');
+  const { items: jobs }        = useRTDB('jobs');
+  const { items: missions }    = useRTDB('missions');
+  const { items: leaves }      = useRTDB('leaves');
+  const { items: teamMembers } = useRTDB('team');
   const [forms, setForms] = useState({});
 
+  // Planning jobs not yet fully allocated
   const unallocated = jobs.filter(j =>
     !j.workers?.length || !j.planningStart || !j.planningEnd
   );
+
+  // Deal Flow missions with no workers assigned — shown here as a reminder
+  const DONE_STATUSES_M = ['Sent', 'Lost'];
+  const unallocatedMissions = missions.filter(m =>
+    !m.workers?.length && !DONE_STATUSES_M.includes(m.status)
+  );
+
+  // Team for assignment buttons: active + allocationOnly (Geoffrey, Samuel)
+  const pickerTeam = teamMembers.filter(m => m.active || m.allocationOnly);
 
   const getForm = id => forms[id] || { workers: [], planningStart: '', planningEnd: '' };
   const setForm = (id, data) => setForms(prev => ({ ...prev, [id]: { ...getForm(id), ...data } }));
@@ -2016,115 +2028,151 @@ function UnallocatedJobs({ activeTeam }) {
     setForms(prev => { const n={...prev}; delete n[job.id]; return n; });
   };
 
-  if (unallocated.length === 0) return (
+  const allocateMission = mission => {
+    const f = getForm(mission.id);
+    if (!f.workers.length) { alert('Select at least one team member'); return; }
+    dbUpdate('missions', mission.id, { workers: f.workers });
+    setForms(prev => { const n={...prev}; delete n[mission.id]; return n; });
+  };
+
+  if (unallocated.length === 0 && unallocatedMissions.length === 0) return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
       <div className="text-5xl mb-4">✅</div>
       <p className="text-lg font-semibold text-gray-700">All projects are allocated!</p>
-      <p className="text-sm text-gray-400 mt-1">Every job has people and dates assigned.</p>
+      <p className="text-sm text-gray-400 mt-1">Every job and mission has people assigned.</p>
+    </div>
+  );
+
+  const renderMemberButtons = (itemId, f, withDates) => (
+    <div className="flex-1">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Assign to</p>
+      <div className="flex flex-wrap gap-2">
+        {pickerTeam.map(m => {
+          const hasLeave = withDates && f.planningStart && f.planningEnd &&
+            checkLeaveConflicts([m.name], f.planningStart, f.planningEnd, leaves).length > 0;
+          const selected = f.workers.includes(m.name);
+          return (
+            <button key={m.name} onClick={() => toggleWorker(itemId, m.name)}
+              className={`flex-1 min-w-[80px] py-2 rounded-xl text-xs font-semibold border-2 transition-all ${selected
+                ? 'border-transparent text-white shadow-sm'
+                : hasLeave
+                  ? 'border-orange-300 bg-orange-50 text-gray-500 hover:border-orange-400'
+                  : 'border-gray-200 text-gray-500 hover:border-gray-300 bg-white'}`}
+              style={selected ? {background: m.color||'#6b7280'} : {}}>
+              <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold mx-auto mb-1"
+                style={{background: selected ? 'rgba(255,255,255,0.3)' : m.color||'#6b7280'}}>
+                {m.initials}
+              </span>
+              {m.name}
+              {hasLeave && <span className="block text-[9px] text-orange-500 mt-0.5">🏖 on leave</span>}
+            </button>
+          );
+        })}
+      </div>
+      {pickerTeam.length === 0 && <p className="text-xs text-gray-400 italic">No active members — set them in Settings.</p>}
     </div>
   );
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {unallocated.map(job => {
-        const f = getForm(job.id);
-        const canAllocate = f.workers.length > 0 && f.planningStart && f.planningEnd;
-        return (
-          <div key={job.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-4 flex flex-col">
-            {/* Header */}
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <h3 className="font-semibold text-gray-900 truncate">{job.client}</h3>
-                <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{job.methodology || job.scope || '—'}</p>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${job.type==='Valuation'?'bg-blue-50 text-blue-700':job.type==='IA Review'?'bg-violet-50 text-violet-700':'bg-amber-50 text-amber-700'}`}>
-                  {job.type}
-                </span>
-                <button
-                  onClick={() => { if(window.confirm(`Delete "${job.client}" permanently?`)) dbDelete('jobs', job.id); }}
-                  title="Delete project"
-                  className="w-6 h-6 flex items-center justify-center rounded-full text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors text-sm">
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {/* Meta */}
-            <div className="flex flex-wrap gap-3 text-xs text-gray-500">
-              {job.assets  && <span>🗂 {job.assets} assets</span>}
-              {job.numDays && <span>⏱ {job.numDays} days</span>}
-              {job.signOff && <span>🎯 Sign-off {job.signOff.slice(5)}</span>}
-            </div>
-
-            {/* Status chip */}
-            {job.workers?.length > 0 && !job.planningStart && (
-              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-2 py-1">
-                ⚠️ Has workers but no dates: {job.workers.join(', ')}
-              </p>
-            )}
-            {!job.workers?.length && (
-              <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-2 py-1">No one assigned yet</p>
-            )}
-
-            {/* Team member buttons */}
-            <div className="flex-1">
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Assign to</p>
-              <div className="flex flex-wrap gap-2">
-                {activeTeam.map(m => {
-                  const hasLeave = f.planningStart && f.planningEnd &&
-                    checkLeaveConflicts([m.name], f.planningStart, f.planningEnd, leaves).length > 0;
-                  const selected = f.workers.includes(m.name);
-                  return (
-                  <button key={m.name} onClick={() => toggleWorker(job.id, m.name)}
-                    className={`flex-1 min-w-[80px] py-2 rounded-xl text-xs font-semibold border-2 transition-all ${selected
-                      ? 'border-transparent text-white shadow-sm'
-                      : hasLeave
-                        ? 'border-orange-300 bg-orange-50 text-gray-500 hover:border-orange-400'
-                        : 'border-gray-200 text-gray-500 hover:border-gray-300 bg-white'}`}
-                    style={selected ? {background: m.color} : {}}>
-                    <span className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold mx-auto mb-1"
-                      style={{background: selected ? 'rgba(255,255,255,0.3)' : m.color}}>
-                      {m.initials}
-                    </span>
-                    {m.name}
-                    {hasLeave && <span className="block text-[9px] text-orange-500 mt-0.5">🏖 on leave</span>}
+    <div className="space-y-6">
+      {/* Planning jobs not yet allocated */}
+      {unallocated.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">📋 Planning jobs</p>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {unallocated.map(job => {
+              const f = getForm(job.id);
+              const canAllocate = f.workers.length > 0 && f.planningStart && f.planningEnd;
+              return (
+                <div key={job.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-4 flex flex-col">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate">{job.client}</h3>
+                      <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{job.methodology || job.scope || '—'}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${job.type==='Valuation'?'bg-blue-50 text-blue-700':job.type==='IA Review'?'bg-violet-50 text-violet-700':'bg-amber-50 text-amber-700'}`}>{job.type}</span>
+                      <button onClick={() => { if(window.confirm(`Delete "${job.client}" permanently?`)) dbDelete('jobs', job.id); }}
+                        className="w-6 h-6 flex items-center justify-center rounded-full text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors text-sm">✕</button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                    {job.assets  && <span>🗂 {job.assets} assets</span>}
+                    {job.numDays && <span>⏱ {job.numDays} days</span>}
+                    {job.signOff && <span>🎯 Sign-off {job.signOff.slice(5)}</span>}
+                  </div>
+                  {job.workers?.length > 0 && !job.planningStart && (
+                    <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-2 py-1">⚠️ Has workers but no dates: {job.workers.join(', ')}</p>
+                  )}
+                  {!job.workers?.length && (
+                    <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-2 py-1">No one assigned yet</p>
+                  )}
+                  {renderMemberButtons(job.id, f, true)}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs font-medium text-gray-600">Start date</label>
+                      <input type="date" value={f.planningStart}
+                        onChange={e => setForm(job.id, {planningStart: e.target.value})}
+                        className="w-full mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-600">End date</label>
+                      <input type="date" value={f.planningEnd}
+                        onChange={e => setForm(job.id, {planningEnd: e.target.value})}
+                        className="w-full mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none" />
+                    </div>
+                  </div>
+                  <button onClick={() => allocate(job)} disabled={!canAllocate}
+                    className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${canAllocate ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
+                    {canAllocate ? 'Allocate ✓' : 'Complete all fields'}
                   </button>
-                  );
-                })}
-              </div>
-              {activeTeam.length === 0 && (
-                <p className="text-xs text-gray-400 italic">No active members — set them in Settings.</p>
-              )}
-            </div>
-
-            {/* Dates */}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs font-medium text-gray-600">Start date</label>
-                <input type="date" value={f.planningStart}
-                  onChange={e => setForm(job.id, {planningStart: e.target.value})}
-                  className="w-full mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600">End date</label>
-                <input type="date" value={f.planningEnd}
-                  onChange={e => setForm(job.id, {planningEnd: e.target.value})}
-                  className="w-full mt-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:border-blue-500 focus:outline-none" />
-              </div>
-            </div>
-
-            {/* Allocate button */}
-            <button onClick={() => allocate(job)}
-              disabled={!canAllocate}
-              className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${canAllocate
-                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
-              {canAllocate ? 'Allocate ✓' : 'Complete all fields'}
-            </button>
+                </div>
+              );
+            })}
           </div>
-        );
-      })}
+        </div>
+      )}
+
+      {/* Deal Flow missions with no workers */}
+      {unallocatedMissions.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">🔵 Deal Flow — not yet assigned</p>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {unallocatedMissions.map(mission => {
+              const f = getForm(mission.id);
+              const canAllocate = f.workers.length > 0;
+              return (
+                <div key={mission.id} className="bg-white rounded-xl border border-blue-100 shadow-sm p-4 space-y-4 flex flex-col">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate">{mission.client}</h3>
+                      <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{mission.mission || '—'}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold bg-blue-50 text-blue-700">Deal Flow</span>
+                      <Badge s={mission.status} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-2 py-1">No one assigned yet</p>
+                  {renderMemberButtons(mission.id, f, false)}
+                  <button onClick={() => allocateMission(mission)} disabled={!canAllocate}
+                    className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${canAllocate ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
+                    {canAllocate ? 'Assign ✓' : 'Select at least one person'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {unallocated.length === 0 && unallocatedMissions.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="text-5xl mb-4">✅</div>
+          <p className="text-lg font-semibold text-gray-700">All projects are allocated!</p>
+          <p className="text-sm text-gray-400 mt-1">Every job and mission has people assigned.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -2423,11 +2471,14 @@ function LeavesTab({ activeTeam }) {
 
 function AllocationPage() {
   const { items: jobs }        = useRTDB('jobs');
+  const { items: missions }    = useRTDB('missions');
   const { items: teamMembers } = useRTDB('team');
   const [tab, setTab] = useState('Not Allocated');
 
   const activeTeam = teamMembers.filter(m => m.active);
-  const unallocatedCount = jobs.filter(j => !j.workers?.length || !j.planningStart || !j.planningEnd).length;
+  const DONE_STATUSES_M  = ['Sent', 'Lost'];
+  const unallocatedCount = jobs.filter(j => !j.workers?.length || !j.planningStart || !j.planningEnd).length
+    + missions.filter(m => !m.workers?.length && !DONE_STATUSES_M.includes(m.status)).length;
 
   const TABS = ['Not Allocated', 'Calendar', 'Jobs', 'Project Gantt', 'Team Gantt', 'Leaves'];
 
