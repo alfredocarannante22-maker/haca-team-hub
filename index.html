@@ -1565,18 +1565,28 @@ function TeamGanttActive({ activeTeam }) {
   const { items: jobs }        = useRTDB('jobs');
   const { items: leaves }      = useRTDB('leaves');
   const { items: ganttBlocks } = useRTDB('ganttBlocks');
-  const [monthOffset, setMonthOffset]   = useState(new Date().getMonth());
+  const [monthOffset, setMonthOffset]   = useState(0);
   const [draggingJobId, setDraggingJobId] = useState(null);
   const [blockModal, setBlockModal]       = useState(null);
   const [pendingDrag, setPendingDrag]     = useState(null);
   const dragInfoRef = useRef(null);
 
-  const base = new Date(2026, monthOffset, 1);
-  const year  = base.getFullYear();
-  const month = base.getMonth();
-  const daysInMonth = new Date(year, month+1, 0).getDate();
-  const days  = Array.from({length:daysInMonth},(_,i)=>i+1);
+  const NUM_MONTHS = 4;
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+  const now = new Date();
+  const baseDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+
+  const monthSlots = Array.from({length: NUM_MONTHS}, (_, i) => {
+    const d = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, 1);
+    const yr = d.getFullYear();
+    const mo = d.getMonth();
+    const dim = new Date(yr, mo + 1, 0).getDate();
+    return { year: yr, month: mo, days: Array.from({length: dim}, (_, j) => j + 1) };
+  });
+
+  const firstSlot = monthSlots[0];
+  const lastSlot  = monthSlots[NUM_MONTHS - 1];
 
   const jobsWithDates = jobs.filter(j => j.planningStart && j.planningEnd);
 
@@ -1587,18 +1597,19 @@ function TeamGanttActive({ activeTeam }) {
     return map;
   }, [jobsWithDates]);
 
-  const inRange = (start, end, day) => {
-    const d = new Date(year, month, day);
+  const inRange = (start, end, yr, mo, day) => {
+    const d = new Date(yr, mo, day);
     const s = new Date(start); s.setHours(0,0,0,0);
     const e = new Date(end);   e.setHours(23,59,59,999);
     return d >= s && d <= e;
   };
 
-  const isToday   = day => { const t=new Date(); return t.getFullYear()===year&&t.getMonth()===month&&t.getDate()===day; };
-  const isWeekend = day => [0,6].includes(new Date(year,month,day).getDay());
+  const todayObj = new Date();
+  const isToday   = (yr, mo, day) => todayObj.getFullYear()===yr && todayObj.getMonth()===mo && todayObj.getDate()===day;
+  const isWeekend = (yr, mo, day) => [0,6].includes(new Date(yr, mo, day).getDay());
 
-  const isOnLeave = (memberName, day) => {
-    const d = new Date(year, month, day);
+  const isOnLeave = (memberName, yr, mo, day) => {
+    const d = new Date(yr, mo, day);
     return leaves.filter(l => l.member === memberName && l.start && l.end)
       .some(l => d >= new Date(l.start) && d <= new Date(l.end));
   };
@@ -1609,8 +1620,12 @@ function TeamGanttActive({ activeTeam }) {
     return d.toISOString().slice(0,10);
   };
 
-  const handleJobDragStart = (e, job, day) => {
-    dragInfoRef.current = { jobId: job.id, originDay: day };
+  const dateDeltaDays = (fromStr, toStr) => {
+    return Math.round((new Date(toStr) - new Date(fromStr)) / 86400000);
+  };
+
+  const handleJobDragStart = (e, job, dateStr) => {
+    dragInfoRef.current = { jobId: job.id, originDateStr: dateStr };
     setDraggingJobId(job.id);
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -1620,7 +1635,7 @@ function TeamGanttActive({ activeTeam }) {
     dragInfoRef.current = null;
   };
 
-  const handleDropOnCell = (e, member, targetDay) => {
+  const handleDropOnCell = (e, member, targetDateStr) => {
     e.preventDefault();
     const di = dragInfoRef.current;
     if (!di) return;
@@ -1628,7 +1643,7 @@ function TeamGanttActive({ activeTeam }) {
     dragInfoRef.current = null;
     setDraggingJobId(null);
     if (!job || !(job.workers||[]).includes(member.name)) return;
-    const delta = targetDay - di.originDay;
+    const delta = dateDeltaDays(di.originDateStr, targetDateStr);
     if (delta === 0) return;
     const newStart = addDaysStr(job.planningStart, delta);
     const newEnd   = addDaysStr(job.planningEnd, delta);
@@ -1641,8 +1656,7 @@ function TeamGanttActive({ activeTeam }) {
   };
 
   const openAddBlock = (member) => {
-    const today = new Date();
-    const dateStr = today.toISOString().slice(0,10);
+    const dateStr = new Date().toISOString().slice(0,10);
     setBlockModal({ mode:'add', member: member.name, start: dateStr, end: dateStr, label: '', color: GANTT_BLOCK_COLORS[0] });
   };
 
@@ -1667,90 +1681,109 @@ function TeamGanttActive({ activeTeam }) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+
+      {/* Navigation — shows range of 4 months */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
         <button onClick={()=>setMonthOffset(o=>o-1)} className="px-3 py-1.5 text-sm rounded-lg hover:bg-gray-200">← Prev</button>
-        <span className="font-semibold text-gray-800">{MONTHS[month]} {year}</span>
+        <span className="font-semibold text-gray-800">
+          {MONTHS[firstSlot.month]} {firstSlot.year} &mdash; {MONTHS[lastSlot.month]} {lastSlot.year}
+        </span>
         <button onClick={()=>setMonthOffset(o=>o+1)} className="px-3 py-1.5 text-sm rounded-lg hover:bg-gray-200">Next →</button>
       </div>
 
-      <div className="overflow-x-auto">
-        <div style={{minWidth: Math.max(900, daysInMonth*34+220)+'px'}}>
-          <div className="flex border-b bg-gray-50 sticky top-0 z-10">
-            <div className="w-52 shrink-0 border-r px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">Member</div>
-            {days.map(d=>(
-              <div key={d} style={{minWidth:34}} className={`flex-1 text-center border-r last:border-0 py-1.5 ${isToday(d)?'bg-blue-50':isWeekend(d)?'bg-gray-50/60':''}`}>
-                <div className={`text-xs font-semibold ${isToday(d)?'text-blue-600':isWeekend(d)?'text-gray-300':'text-gray-400'}`}>{d}</div>
-                <div className="text-gray-300 text-xs">{['S','M','T','W','T','F','S'][new Date(year,month,d).getDay()]}</div>
-              </div>
-            ))}
+      {/* One section per month */}
+      {monthSlots.map(({ year: yr, month: mo, days }) => (
+        <div key={`${yr}-${mo}`} className="border-b last:border-0">
+          {/* Month label */}
+          <div className="px-4 py-1.5 bg-indigo-50 border-b border-indigo-100 flex items-center gap-2">
+            <span className="text-xs font-bold text-indigo-600 uppercase tracking-wide">{MONTHS[mo]} {yr}</span>
           </div>
 
-          {activeTeam.map(member => {
-            const mJobs   = jobsWithDates.filter(j => (j.workers||[]).includes(member.name));
-            const mBlocks = ganttBlocks.filter(b => b.member === member.name);
-            return (
-              <div key={member.id} className="flex border-b last:border-0 hover:bg-blue-50/20 group" style={{minHeight:48}}>
-                <div className="w-52 shrink-0 border-r px-3 flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
-                    style={{background: member.color}}>
-                    {member.initials}
-                  </div>
-                  <span className="text-sm font-medium text-gray-700 truncate flex-1">{member.name}</span>
-                  <button
-                    onClick={() => openAddBlock(member)}
-                    title="Add manual block"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 rounded-full bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-600 text-xs flex items-center justify-center shrink-0">
-                    +
-                  </button>
-                </div>
-                <div className="flex flex-1">
-                  {days.map(d => {
-                    const wknd    = isWeekend(d);
-                    const active  = wknd ? [] : mJobs.filter(j => inRange(j.planningStart, j.planningEnd, d));
-                    const blocks  = wknd ? [] : mBlocks.filter(b => b.start && b.end && inRange(b.start, b.end, d));
-                    const onLeave = !wknd && isOnLeave(member.name, d);
-                    return (
-                      <div key={d} style={{minWidth:34}}
-                        onDragOver={e => e.preventDefault()}
-                        onDrop={e => handleDropOnCell(e, member, d)}
-                        className={`flex-1 border-r last:border-0 flex flex-col gap-0.5 py-1 px-0.5 ${isToday(d)?'bg-blue-50/60':wknd?'bg-gray-50':''}`}>
-                        {onLeave && (
-                          <div title="On leave"
-                            className="h-5 rounded text-[9px] font-semibold flex items-center px-1 overflow-hidden cursor-default select-none text-orange-700"
-                            style={{background:'#fed7aa'}}>
-                            🏖
-                          </div>
-                        )}
-                        {!onLeave && active.map(j => (
-                          <div key={j.id}
-                            draggable
-                            onDragStart={e => handleJobDragStart(e, j, d)}
-                            onDragEnd={handleJobDragEnd}
-                            title={`${j.client}${j.numDays?' — '+j.numDays+(j.effortUnit==='hours'?'h':'d'):''}\n${j.planningStart} → ${j.planningEnd}\nDrag to shift dates`}
-                            className="h-5 rounded text-white text-[9px] font-semibold flex items-center px-1 overflow-hidden cursor-grab active:cursor-grabbing select-none"
-                            style={{background: clientColorMap[j.client]||'#3b82f6', opacity: draggingJobId===j.id ? 0.4 : 0.9}}>
-                            {j.client.length>6?j.client.slice(0,6)+'…':j.client}
-                          </div>
-                        ))}
-                        {blocks.map(b => (
-                          <div key={b.id}
-                            title={b.label}
-                            onClick={() => setBlockModal({mode:'edit', id:b.id, member:b.member, start:b.start, end:b.end, label:b.label, color:b.color})}
-                            className="h-5 rounded text-white text-[9px] font-semibold flex items-center px-1 overflow-hidden cursor-pointer select-none"
-                            style={{background: b.color||'#6366f1', opacity:0.85, outline:'1.5px dashed rgba(255,255,255,0.6)', outlineOffset:'-1px'}}>
-                            {(b.label||'').length>6?(b.label||'').slice(0,6)+'…':(b.label||'')}
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+          <div className="overflow-x-auto">
+            <div style={{minWidth: Math.max(900, days.length*34+220)+'px'}}>
 
+              {/* Day header */}
+              <div className="flex border-b bg-gray-50">
+                <div className="w-52 shrink-0 border-r px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wide">Member</div>
+                {days.map(d => (
+                  <div key={d} style={{minWidth:34}} className={`flex-1 text-center border-r last:border-0 py-1.5 ${isToday(yr,mo,d)?'bg-blue-50':isWeekend(yr,mo,d)?'bg-gray-50/60':''}`}>
+                    <div className={`text-xs font-semibold ${isToday(yr,mo,d)?'text-blue-600':isWeekend(yr,mo,d)?'text-gray-300':'text-gray-400'}`}>{d}</div>
+                    <div className="text-gray-300 text-xs">{['S','M','T','W','T','F','S'][new Date(yr,mo,d).getDay()]}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Member rows */}
+              {activeTeam.map(member => {
+                const mJobs   = jobsWithDates.filter(j => (j.workers||[]).includes(member.name));
+                const mBlocks = ganttBlocks.filter(b => b.member === member.name);
+                return (
+                  <div key={member.id} className="flex border-b last:border-0 hover:bg-blue-50/20 group" style={{minHeight:44}}>
+                    <div className="w-52 shrink-0 border-r px-3 flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"
+                        style={{background: member.color}}>
+                        {member.initials}
+                      </div>
+                      <span className="text-sm font-medium text-gray-700 truncate flex-1">{member.name}</span>
+                      <button
+                        onClick={() => openAddBlock(member)}
+                        title="Add manual block"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 rounded-full bg-gray-200 hover:bg-blue-500 hover:text-white text-gray-600 text-xs flex items-center justify-center shrink-0">
+                        +
+                      </button>
+                    </div>
+                    <div className="flex flex-1">
+                      {days.map(d => {
+                        const wknd    = isWeekend(yr, mo, d);
+                        const dateStr = `${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                        const active  = wknd ? [] : mJobs.filter(j => inRange(j.planningStart, j.planningEnd, yr, mo, d));
+                        const blocks  = wknd ? [] : mBlocks.filter(b => b.start && b.end && inRange(b.start, b.end, yr, mo, d));
+                        const onLeave = !wknd && isOnLeave(member.name, yr, mo, d);
+                        return (
+                          <div key={d} style={{minWidth:34}}
+                            onDragOver={e => e.preventDefault()}
+                            onDrop={e => handleDropOnCell(e, member, dateStr)}
+                            className={`flex-1 border-r last:border-0 flex flex-col gap-0.5 py-1 px-0.5 ${isToday(yr,mo,d)?'bg-blue-50/60':wknd?'bg-gray-50':''}`}>
+                            {onLeave && (
+                              <div title="On leave"
+                                className="h-5 rounded text-[9px] font-semibold flex items-center px-1 overflow-hidden cursor-default select-none text-orange-700"
+                                style={{background:'#fed7aa'}}>
+                                🏖
+                              </div>
+                            )}
+                            {!onLeave && active.map(j => (
+                              <div key={j.id}
+                                draggable
+                                onDragStart={e => handleJobDragStart(e, j, dateStr)}
+                                onDragEnd={handleJobDragEnd}
+                                title={`${j.client}${j.numDays?' — '+j.numDays+(j.effortUnit==='hours'?'h':'d'):''}\n${j.planningStart} → ${j.planningEnd}\nDrag to shift dates`}
+                                className="h-5 rounded text-white text-[9px] font-semibold flex items-center px-1 overflow-hidden cursor-grab active:cursor-grabbing select-none"
+                                style={{background: clientColorMap[j.client]||'#3b82f6', opacity: draggingJobId===j.id ? 0.4 : 0.9}}>
+                                {j.client.length>6?j.client.slice(0,6)+'…':j.client}
+                              </div>
+                            ))}
+                            {blocks.map(b => (
+                              <div key={b.id}
+                                title={b.label}
+                                onClick={() => setBlockModal({mode:'edit', id:b.id, member:b.member, start:b.start, end:b.end, label:b.label, color:b.color})}
+                                className="h-5 rounded text-white text-[9px] font-semibold flex items-center px-1 overflow-hidden cursor-pointer select-none"
+                                style={{background: b.color||'#6366f1', opacity:0.85, outline:'1.5px dashed rgba(255,255,255,0.6)', outlineOffset:'-1px'}}>
+                                {(b.label||'').length>6?(b.label||'').slice(0,6)+'…':(b.label||'')}
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      ))}
+
+      {/* Legend */}
       {Object.keys(clientColorMap).length > 0 && (
         <div className="px-4 py-2 border-t bg-gray-50">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Projects</p>
