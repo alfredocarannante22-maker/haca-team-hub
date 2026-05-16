@@ -2509,81 +2509,120 @@ function Meeting() {
 
   if(!current) return <p className="text-gray-400 py-8 text-center">Loading…</p>;
 
+  const kindIcon = k => k==='event'?'📅':k==='job'?'💼':'📁';
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Monday Meeting</h1>
-          <p className="text-sm text-gray-500">{today}</p>
-        </div>
-        <span className="text-sm text-gray-400 font-medium">{index+1} / {agenda.length}</span>
-      </div>
+    <div className="flex gap-6 items-start">
 
-      <div className="w-full bg-gray-200 rounded-full h-2">
-        <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{width:`${((index+1)/agenda.length)*100}%`}} />
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-5">
-        {/* Kind badge */}
-        <span className={`inline-flex text-xs font-semibold px-2.5 py-1 rounded-full ${kindColor(current._kind)}`}>{kindLabel(current._kind)}</span>
-
-        <div className="flex items-start justify-between">
+      {/* ── Left: step-through panel ── */}
+      <div className="flex-1 min-w-0 space-y-6">
+        <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold">{current.client || current.title || '—'}</h2>
-            <p className="text-gray-500 text-sm">{current.mission || current.description || '—'}</p>
+            <h1 className="text-2xl font-bold">Monday Meeting</h1>
+            <p className="text-sm text-gray-500">{today}</p>
           </div>
-          {current._kind !== 'event' && <Badge s={current.status} />}
+          <span className="text-sm text-gray-400 font-medium">{index+1} / {agenda.length}</span>
         </div>
 
-        {current._kind !== 'event' && (
-          <>
-            <div className="flex flex-wrap gap-2">
-              {(current.workers||[]).map(w=>(
-                <span key={w} className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-blue-50 text-blue-700">{w}</span>
-              ))}
-              {current.deadline && <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-amber-50 text-amber-700">📅 {current.deadline}</span>}
-            </div>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="bg-blue-600 h-2 rounded-full transition-all duration-300" style={{width:`${((index+1)/agenda.length)*100}%`}} />
+        </div>
 
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 space-y-5">
+          <span className={`inline-flex text-xs font-semibold px-2.5 py-1 rounded-full ${kindColor(current._kind)}`}>{kindLabel(current._kind)}</span>
+
+          <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Update status</p>
+              <h2 className="text-xl font-bold">{current.client || current.title || '—'}</h2>
+              <p className="text-gray-500 text-sm">{current.mission || current.description || '—'}</p>
+            </div>
+            {current._kind !== 'event' && <Badge s={current.status} />}
+          </div>
+
+          {current._kind !== 'event' && (
+            <>
               <div className="flex flex-wrap gap-2">
-                {(current._kind==='job' ? JOB_STATUSES : MISSION_STATUSES).map(s=>(
-                  <button key={s} onClick={()=>updateStatus(s)}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${current.status===s?'bg-blue-600 text-white border-blue-600':'border-gray-300 text-gray-600 hover:border-blue-400'}`}>{s}</button>
+                {(current.workers||[]).map(w=>(
+                  <span key={w} className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-blue-50 text-blue-700">{w}</span>
                 ))}
+                {current.deadline && <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold bg-amber-50 text-amber-700">📅 {current.deadline}</span>}
               </div>
-            </div>
 
-            <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">💬 Comments</p>
-              <textarea rows={3} className={inp} value={current.comments||''} onChange={e=>updateComments(e.target.value)} placeholder="Add or update notes…" />
-            </div>
-          </>
-        )}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Update status</p>
+                <div className="flex flex-wrap gap-2">
+                  {(current._kind==='job' ? JOB_STATUSES : MISSION_STATUSES).map(s=>(
+                    <button key={s} onClick={()=>updateStatus(s)}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${current.status===s?'bg-blue-600 text-white border-blue-600':'border-gray-300 text-gray-600 hover:border-blue-400'}`}>{s}</button>
+                  ))}
+                </div>
+              </div>
 
-        {current._kind === 'event' && (
-          <div className="space-y-3">
-            {current.date && <p className="text-sm text-gray-500">📅 {current.date}</p>}
-            {current.notes && <p className="text-sm text-gray-600">{current.notes}</p>}
-            <button onClick={removeEvent}
-              className="px-4 py-2 text-sm rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 font-medium">
-              🗑 Remove — no longer relevant
-            </button>
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">💬 Comments</p>
+                <textarea rows={3} className={inp} value={current.comments||''} onChange={e=>updateComments(e.target.value)} placeholder="Add or update notes…" />
+              </div>
+            </>
+          )}
+
+          {current._kind === 'event' && (
+            <div className="space-y-3">
+              {current.date && <p className="text-sm text-gray-500">📅 {current.date}</p>}
+              {current.notes && <p className="text-sm text-gray-600">{current.notes}</p>}
+              <button onClick={removeEvent}
+                className="px-4 py-2 text-sm rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 font-medium">
+                🗑 Remove — no longer relevant
+              </button>
+            </div>
+          )}
+
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">📝 Meeting note (local only)</p>
+            <textarea rows={2} className={inp} value={notes[current.id]||''} onChange={e=>setNotes(n=>({...n,[current.id]:e.target.value}))} placeholder="Internal note for this meeting…" />
           </div>
-        )}
+        </div>
 
-        <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">📝 Meeting note (local only)</p>
-          <textarea rows={2} className={inp} value={notes[current.id]||''} onChange={e=>setNotes(n=>({...n,[current.id]:e.target.value}))} placeholder="Internal note for this meeting…" />
+        <div className="flex items-center justify-between">
+          <button onClick={prev} disabled={index===0} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40">← Previous</button>
+          <button onClick={next} className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-medium">
+            {index<agenda.length-1?'Next →':'Finish meeting ✓'}
+          </button>
         </div>
       </div>
 
-      <div className="flex items-center justify-between">
-        <button onClick={prev} disabled={index===0} className="px-4 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40">← Previous</button>
-        <button onClick={next} className="px-5 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 font-medium">
-          {index<agenda.length-1?'Next →':'Finish meeting ✓'}
-        </button>
+      {/* ── Right: agenda overview panel ── */}
+      <div className="w-72 shrink-0 sticky top-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-4 py-3 border-b bg-gray-50">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Agenda overview</p>
+            <p className="text-xs text-gray-400 mt-0.5">{agenda.length} item{agenda.length!==1?'s':''} · click to jump</p>
+          </div>
+          <div className="divide-y divide-gray-100 max-h-[70vh] overflow-y-auto">
+            {agenda.map((item, i) => {
+              const active = i === index;
+              const done   = i < index;
+              return (
+                <button key={item.id+i} onClick={() => setIndex(i)}
+                  className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors
+                    ${active ? 'bg-blue-600' : done ? 'bg-gray-50 hover:bg-gray-100' : 'hover:bg-blue-50/40'}`}>
+                  <span className={`mt-0.5 text-xs font-bold shrink-0 w-5 text-center ${active?'text-white':done?'text-gray-300':'text-gray-400'}`}>
+                    {done ? '✓' : active ? '▶' : i+1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold truncate ${active?'text-white':done?'text-gray-400':'text-gray-700'}`}>
+                      {item.client || item.title || '—'}
+                    </p>
+                    <p className={`text-xs truncate ${active?'text-blue-200':done?'text-gray-300':'text-gray-400'}`}>
+                      {kindIcon(item._kind)} {item._kind==='event' ? (item.date||'event') : (item.status||'—')}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
+
     </div>
   );
 }
