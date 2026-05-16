@@ -1151,6 +1151,10 @@ function JobsTable() {
 function GanttChart() {
   const { items } = useRTDB('jobs');
   const [monthOffset, setMonthOffset] = useState(new Date().getMonth());
+  const [modal, setModal]             = useState(null);
+  const [form,  setForm]              = useState({});
+  const [draggingJobId, setDraggingJobId] = useState(null);
+  const dragInfoRef = useRef(null);
 
   const base = new Date(2026, monthOffset, 1);
   const year = base.getFullYear();
@@ -1160,6 +1164,9 @@ function GanttChart() {
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
   const jobsWithDates = items.filter(j=>j.planningStart&&j.planningEnd);
+
+  const isWeekend = day => [0,6].includes(new Date(year,month,day).getDay());
+  const isToday   = day => { const t=new Date(); return t.getFullYear()===year&&t.getMonth()===month&&t.getDate()===day; };
 
   const inRange = (job, day) => {
     const d = new Date(year, month, day);
@@ -1177,35 +1184,95 @@ function GanttChart() {
     return e.getFullYear()===year && e.getMonth()===month && e.getDate()===day;
   };
 
+  const addDaysStr = (dateStr, n) => {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0,10);
+  };
+
+  const openAdd = () => {
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-01`;
+    setForm({client:'', workers:[], status:'Not Started', type:'Valuation - Audit', numDays:'', effortUnit:'days', signOff:'', planningStart:dateStr, planningEnd:dateStr, assets:'', methodology:'', scope:''});
+    setModal('add');
+  };
+  const openEdit = j => { setForm({...j}); setModal(j); };
+
+  const save = () => {
+    const item = { ...form, workers: Array.isArray(form.workers) ? form.workers : [] };
+    if (!modal || modal === 'add') { const id=`j${Date.now()}`; dbSet('jobs',id,{id,...item}); }
+    else { dbUpdate('jobs', modal.id, item); }
+    setModal(null);
+  };
+
+  const handleJobDragStart = (e, job, day) => {
+    dragInfoRef.current = { jobId: job.id, originDay: day };
+    setDraggingJobId(job.id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleJobDragEnd = () => { setDraggingJobId(null); dragInfoRef.current = null; };
+
+  const handleDropOnCell = (e, targetDay) => {
+    e.preventDefault();
+    const di = dragInfoRef.current;
+    if (!di) return;
+    const job = jobsWithDates.find(j => j.id === di.jobId);
+    if (!job) { dragInfoRef.current=null; setDraggingJobId(null); return; }
+    const delta = targetDay - di.originDay;
+    if (delta !== 0) {
+      dbUpdate('jobs', job.id, {
+        planningStart: addDaysStr(job.planningStart, delta),
+        planningEnd:   addDaysStr(job.planningEnd, delta),
+      });
+    }
+    dragInfoRef.current = null;
+    setDraggingJobId(null);
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
         <button onClick={()=>setMonthOffset(o=>o-1)} className="px-3 py-1.5 text-sm rounded-lg hover:bg-gray-200">← Prev</button>
         <span className="font-semibold">{MONTHS[month]} {year}</span>
-        <button onClick={()=>setMonthOffset(o=>o+1)} className="px-3 py-1.5 text-sm rounded-lg hover:bg-gray-200">Next →</button>
+        <div className="flex items-center gap-2">
+          <button onClick={openAdd} className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">+ Add job</button>
+          <button onClick={()=>setMonthOffset(o=>o+1)} className="px-3 py-1.5 text-sm rounded-lg hover:bg-gray-200">Next →</button>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <div style={{minWidth: Math.max(900, daysInMonth*30+180)+'px'}}>
           <div className="flex border-b bg-gray-50">
             <div className="w-44 shrink-0 border-r px-3 py-2 text-xs font-medium text-gray-500">Client</div>
             {days.map(d=>(
-              <div key={d} className="flex-1 text-center border-r last:border-0 py-1.5" style={{minWidth:28}}>
-                <div className="text-xs text-gray-400 font-medium">{d}</div>
+              <div key={d} style={{minWidth:28}} className={`flex-1 text-center border-r last:border-0 py-1.5 ${isToday(d)?'bg-blue-50':isWeekend(d)?'bg-gray-50/60':''}`}>
+                <div className={`text-xs font-medium ${isToday(d)?'text-blue-600':isWeekend(d)?'text-gray-300':'text-gray-400'}`}>{d}</div>
+                <div className="text-[9px] text-gray-300">{['S','M','T','W','T','F','S'][new Date(year,month,d).getDay()]}</div>
               </div>
             ))}
           </div>
           {jobsWithDates.map(j=>(
-            <div key={j.id} className="flex border-b last:border-0 hover:bg-gray-50" style={{height:36}}>
-              <div className="w-44 shrink-0 border-r px-3 flex items-center text-xs font-medium text-gray-700 truncate">{j.client}</div>
+            <div key={j.id} className={`flex border-b last:border-0 hover:bg-gray-50 group ${draggingJobId===j.id?'opacity-50':''}`} style={{height:36}}>
+              <div className="w-44 shrink-0 border-r px-3 flex items-center gap-1.5">
+                <span className="text-xs font-medium text-gray-700 truncate flex-1">{j.client}</span>
+                <button onClick={()=>openEdit(j)} title="Edit job"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-blue-600 text-xs shrink-0">✏️</button>
+              </div>
               {days.map(d=>{
                 const active = inRange(j,d);
                 const start  = isStartDay(j,d);
                 const end    = isEndDay(j,d);
+                const wknd   = isWeekend(d);
                 return (
-                  <div key={d} className="flex-1 border-r last:border-0 flex items-center px-0.5" style={{minWidth:28}}>
-                    {active&&(
-                      <div className={`h-5 w-full ${TYPE_COLORS[j.type]||'bg-blue-400'} opacity-80 ${start?'rounded-l-full':'border-l-0'} ${end?'rounded-r-full':'border-r-0'}`}
-                        title={`${j.client} — ${(j.workers||[]).join(', ')}`} />
+                  <div key={d} style={{minWidth:28}}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => handleDropOnCell(e, d)}
+                    className={`flex-1 border-r last:border-0 flex items-center px-0.5 ${isToday(d)?'bg-blue-50/40':wknd?'bg-gray-50':''}`}>
+                    {active && (
+                      <div
+                        draggable={!wknd}
+                        onDragStart={e => !wknd && handleJobDragStart(e, j, d)}
+                        onDragEnd={handleJobDragEnd}
+                        title={`${j.client} — ${(j.workers||[]).join(', ')}\n${j.planningStart} → ${j.planningEnd}\nDrag to shift dates`}
+                        className={`h-5 w-full ${TYPE_COLORS[j.type]||'bg-blue-400'} ${wknd?'opacity-20':'opacity-80 cursor-grab active:cursor-grabbing'} ${start?'rounded-l-full':''} ${end?'rounded-r-full':''}`} />
                     )}
                   </div>
                 );
@@ -1213,17 +1280,71 @@ function GanttChart() {
             </div>
           ))}
           {jobsWithDates.length===0&&(
-            <p className="text-center text-gray-400 py-8 text-sm">No jobs with planning dates this month.</p>
+            <p className="text-center text-gray-400 py-8 text-sm">No jobs with planning dates. Click <strong>+ Add job</strong> to create one.</p>
           )}
         </div>
       </div>
-      <div className="flex gap-4 px-4 py-2 border-t text-xs text-gray-500">
-        {JOB_TYPES.map(t=>(
-          <span key={t} className="flex items-center gap-1.5">
-            <span className={`inline-block w-3 h-3 rounded-full ${TYPE_COLORS[t]}`}/>{t}
-          </span>
-        ))}
+      <div className="flex items-center justify-between gap-4 px-4 py-2 border-t">
+        <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+          {JOB_TYPES.map(t=>(
+            <span key={t} className="flex items-center gap-1.5">
+              <span className={`inline-block w-3 h-3 rounded-full ${TYPE_COLORS[t]}`}/>{t}
+            </span>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400 shrink-0">💡 Drag a bar to shift dates · ✏️ to edit</p>
       </div>
+
+      {modal&&(
+        <Modal title={modal==='add'?'New job':`Edit — ${modal.client||''}`} onClose={()=>setModal(null)}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs font-medium text-gray-600">Client</label>
+                <input className={inp+' mt-1'} value={form.client||''} onChange={e=>setForm({...form,client:e.target.value})} /></div>
+              <div><label className="text-xs font-medium text-gray-600">Type</label>
+                <select className={inp+' mt-1'} value={form.type||'Valuation - Audit'} onChange={e=>setForm({...form,type:e.target.value})}>
+                  {JOB_TYPES.map(t=><option key={t}>{t}</option>)}</select></div>
+            </div>
+            <div><label className="text-xs font-medium text-gray-600">Workers</label>
+              <WorkerPicker value={form.workers||[]} onChange={v=>setForm({...form,workers:v})} /></div>
+            <div><label className="text-xs font-medium text-gray-600">Sign-off</label>
+              <input type="date" className={inp+' mt-1'} value={form.signOff||''} onChange={e=>setForm({...form,signOff:e.target.value})} /></div>
+            <div className="grid grid-cols-3 gap-3">
+              <div><label className="text-xs font-medium text-gray-600">Assets</label>
+                <input className={inp+' mt-1'} value={form.assets||''} onChange={e=>setForm({...form,assets:e.target.value})} /></div>
+              <div><label className="text-xs font-medium text-gray-600">Methodology</label>
+                <input className={inp+' mt-1'} value={form.methodology||''} onChange={e=>setForm({...form,methodology:e.target.value})} /></div>
+              <div><label className="text-xs font-medium text-gray-600">Effort</label>
+                <div className="flex gap-1 mt-1">
+                  <input type="number" min="0" step="0.5" className={inp+' flex-1'} value={form.numDays||''} onChange={e=>setForm({...form,numDays:e.target.value})} />
+                  <select className={inp+' w-24 shrink-0'} value={form.effortUnit||'days'} onChange={e=>setForm({...form,effortUnit:e.target.value})}>
+                    <option value="days">days</option><option value="hours">hours</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs font-medium text-gray-600">Planning start</label>
+                <input type="date" className={inp+' mt-1'} value={form.planningStart||''} onChange={e=>setForm({...form,planningStart:e.target.value})} /></div>
+              <div><label className="text-xs font-medium text-gray-600">Planning end</label>
+                <input type="date" className={inp+' mt-1'} value={form.planningEnd||''} onChange={e=>setForm({...form,planningEnd:e.target.value})} /></div>
+            </div>
+            <div><label className="text-xs font-medium text-gray-600">Scope / notes</label>
+              <textarea rows={2} className={inp+' mt-1'} value={form.scope||''} onChange={e=>setForm({...form,scope:e.target.value})} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs font-medium text-gray-600">Status</label>
+                <select className={inp+' mt-1'} value={form.status||'Not Started'} onChange={e=>setForm({...form,status:e.target.value})}>
+                  {JOB_STATUSES.map(s=><option key={s}>{s}</option>)}</select></div>
+              <div><label className="text-xs font-medium text-gray-600">Deadline 🔔</label>
+                <input type="date" className={inp+' mt-1'} value={form.deadline||''} onChange={e=>setForm({...form,deadline:e.target.value})} /></div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-5">
+            <button onClick={()=>setModal(null)} className="px-3 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+            <button onClick={save} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Save</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
