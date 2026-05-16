@@ -7,6 +7,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -131,7 +132,7 @@ const inp = "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:bo
 /* ================================================================
    SIDEBAR
    ================================================================ */
-function Sidebar({ page, setPage }) {
+function Sidebar({ page, setPage, onSignOut }) {
   const nav = [
     { id:'dashboard',  label:'📊 Dashboard' },
     { id:'dealflow',   label:'💼 Deal Flow' },
@@ -154,7 +155,13 @@ function Sidebar({ page, setPage }) {
           </button>
         ))}
       </nav>
-      <p className="px-4 py-3 text-xs text-gray-600 border-t border-gray-700">Team Hub v1.0</p>
+      <div className="px-3 py-3 border-t border-gray-700 space-y-1">
+        <button onClick={onSignOut}
+          className="w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-800 hover:text-white transition-colors">
+          🚪 Sign out
+        </button>
+        <p className="px-3 text-xs text-gray-700">Team Hub v1.0</p>
+      </div>
     </aside>
   );
 }
@@ -3234,7 +3241,118 @@ function EmailSettings() {
 /* ================================================================
    APP ROOT
    ================================================================ */
-function App() {
+/* ================================================================
+   AUTH
+   ================================================================ */
+const ALLOWED_EMAILS = [
+  'acarannante@hacapartners.lu',
+  'gbarre@hacapartners.lu',
+  'mmettoudi@hacapartners.lu',
+  'sdemade@hacapartners.lu',
+  'sclerc@hacapartners.lu',
+];
+
+const auth = firebase.auth();
+
+function LoginScreen() {
+  const [email,    setEmail]    = useState('');
+  const [password, setPassword] = useState('');
+  const [error,    setError]    = useState('');
+  const [loading,  setLoading]  = useState(false);
+  const [showPwd,  setShowPwd]  = useState(false);
+
+  const signIn = async e => {
+    e.preventDefault();
+    setError('');
+    if (!ALLOWED_EMAILS.includes(email.trim().toLowerCase())) {
+      setError('This email address does not have access to HACA Team Hub.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await auth.signInWithEmailAndPassword(email.trim(), password);
+    } catch (err) {
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError('Incorrect email or password. Contact your admin if you need access.');
+      } else if (err.code === 'auth/too-many-requests') {
+        setError('Too many failed attempts. Please try again later.');
+      } else {
+        setError('Sign-in failed. Please try again.');
+      }
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-950 flex items-center justify-center p-4">
+      <div className="w-full max-w-sm">
+        {/* Logo / branding */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 shadow-lg mb-4">
+            <span className="text-3xl">🏢</span>
+          </div>
+          <h1 className="text-2xl font-bold text-white">HACA Team Hub</h1>
+          <p className="text-blue-300 text-sm mt-1">Sign in to continue</p>
+        </div>
+
+        {/* Form card */}
+        <div className="bg-white rounded-2xl shadow-2xl p-8">
+          <form onSubmit={signIn} className="space-y-5">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Email address</label>
+              <input
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="yourname@hacapartners.lu"
+                className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Password</label>
+              <div className="relative">
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all pr-10"
+                />
+                <button type="button" onClick={() => setShowPwd(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">
+                  {showPwd ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-xs text-red-600">
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full py-3 rounded-xl text-sm font-semibold text-white transition-all shadow-sm ${loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98]'}`}>
+              {loading ? 'Signing in…' : 'Sign in'}
+            </button>
+          </form>
+
+          <p className="text-center text-xs text-gray-400 mt-6">
+            Access restricted to HACA Partners team members.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AppShell() {
   const [page, setPage] = useState('dashboard');
   const { items: jobs }        = useRTDB('jobs');
   const { items: teamMembers } = useRTDB('team');
@@ -3243,14 +3361,12 @@ function App() {
     dbSeedIfEmpty('team', SEED_TEAM);
   }, []);
 
-  // Init EmailJS and check deadlines once jobs are loaded
   useEffect(() => {
     const cfg = getEmailJSConfig();
     if (cfg.publicKey) emailjs.init(cfg.publicKey);
     if (jobs.length) checkAndSendDeadlineEmails(jobs, teamMembers);
   }, [jobs, teamMembers]);
 
-  // Migration: fix worker names in existing Firebase data
   useEffect(() => {
     const NAME_MAP = { 'Seb': 'Sebastien', 'Alfredo': 'Alfredo Carannante' };
     jobs.forEach(j => {
@@ -3262,9 +3378,11 @@ function App() {
     });
   }, [jobs.length]);
 
+  const signOut = () => auth.signOut();
+
   return (
     <div className="flex min-h-screen">
-      <Sidebar page={page} setPage={setPage} />
+      <Sidebar page={page} setPage={setPage} onSignOut={signOut} />
       <main className="ml-52 flex-1 min-h-screen">
         <div className="p-6 max-w-7xl mx-auto">
           {page==='dashboard'  && <Dashboard />}
@@ -3277,6 +3395,32 @@ function App() {
       </main>
     </div>
   );
+}
+
+function App() {
+  const [user, setUser] = useState(undefined); // undefined = checking auth
+
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(u => {
+      if (u && !ALLOWED_EMAILS.includes(u.email?.toLowerCase())) {
+        auth.signOut();
+        setUser(null);
+      } else {
+        setUser(u || null);
+      }
+    });
+    return unsub;
+  }, []);
+
+  if (user === undefined) return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-blue-950 flex items-center justify-center">
+      <div className="text-blue-300 text-sm animate-pulse">Loading…</div>
+    </div>
+  );
+
+  if (!user) return <LoginScreen />;
+
+  return <AppShell />;
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
