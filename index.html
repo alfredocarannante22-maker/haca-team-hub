@@ -3045,6 +3045,50 @@ function ExportButton() {
       ];
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dashRows), 'Dashboard');
 
+      /* ---- Sheet 4: Team Gantt (member allocations) ---- */
+      const ganttRows = [];
+      activeTeam.forEach(member => {
+        const memberJobs = jobs.filter(j => (j.workers||[]).includes(member.name) && j.planningStart && j.planningEnd);
+        memberJobs.forEach(j => {
+          const start = new Date(j.planningStart);
+          const end   = new Date(j.planningEnd);
+          const days  = Math.round((end - start) / 86400000) + 1;
+          ganttRows.push({
+            'Member':         member.name,
+            'Client':         j.client || '',
+            'Type':           j.type || '',
+            'Status':         j.status || '',
+            'Planning Start': fmt(j.planningStart),
+            'Planning End':   fmt(j.planningEnd),
+            'Working Days':   days,
+            'Effort':         j.numDays ? `${j.numDays}${j.effortUnit === 'hours' ? 'h' : 'd'}` : '',
+          });
+        });
+      });
+      if (ganttRows.length === 0) ganttRows.push({ 'Member':'(no allocated jobs with dates)' });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ganttRows), 'Team Gantt');
+
+      /* ---- Sheet 5: Historical (prev FY missions) ---- */
+      const prevFyStart = today.getMonth() >= 6
+        ? new Date(today.getFullYear() - 1, 6, 1)
+        : new Date(today.getFullYear() - 2, 6, 1);
+      const prevFyEnd = new Date(prevFyStart.getFullYear() + 1, 5, 30);
+      const inPrevFy  = d => d && new Date(d) >= prevFyStart && new Date(d) <= prevFyEnd;
+      const histRows  = missions
+        .filter(m => inPrevFy(m.deadline))
+        .map(m => ({
+          'Client':          m.client || '',
+          'Workers':         (m.workers || []).join(', '),
+          'Type':            m.type || '',
+          'Mission / Scope': m.mission || '',
+          'Status':          m.status || '',
+          'Comments':        m.comments || '',
+          'Deadline':        fmt(m.deadline),
+          'Fiscal Year':     `FY${prevFyEnd.getFullYear()}`,
+        }));
+      if (histRows.length === 0) histRows.push({ 'Client':'(no historical data)' });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(histRows), 'Historical');
+
       /* ---- Download ---- */
       const dateStr = today.toISOString().slice(0, 10);
       XLSX.writeFile(wb, `HACA_TeamHub_${dateStr}.xlsx`);
@@ -3059,7 +3103,7 @@ function ExportButton() {
       <div className="flex items-start justify-between">
         <div>
           <h2 className="font-semibold">📥 Export to Excel</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Downloads a .xlsx file with three sheets: Deal Flow, Planning, Dashboard KPIs.</p>
+          <p className="text-xs text-gray-500 mt-0.5">Downloads a .xlsx file with 5 sheets: Deal Flow, Planning, Dashboard KPIs, Team Gantt, Historical.</p>
         </div>
       </div>
       <button onClick={doExport} disabled={exporting}
