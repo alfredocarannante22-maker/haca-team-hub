@@ -8,6 +8,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -2963,6 +2964,112 @@ function Guidelines() {
    ================================================================ */
 const COLORS_PALETTE = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#6366f1','#14b8a6','#f97316','#ec4899'];
 
+function ExportButton() {
+  const { items: missions }    = useRTDB('missions');
+  const { items: jobs }        = useRTDB('jobs');
+  const { items: teamMembers } = useRTDB('team');
+  const [exporting, setExporting] = useState(false);
+
+  const doExport = () => {
+    setExporting(true);
+    try {
+      const wb = XLSX.utils.book_new();
+      const today = new Date();
+      const fmt = d => d ? d : '';
+
+      /* ---- Sheet 1: Deal Flow ---- */
+      const missionRows = missions.map(m => ({
+        'Client':        m.client || '',
+        'Workers':       (m.workers || []).join(', '),
+        'Type':          m.type || '',
+        'Mission / Scope': m.mission || '',
+        'Status':        m.status || '',
+        'Comments':      m.comments || '',
+        'Deadline':      fmt(m.deadline),
+      }));
+      if (missionRows.length === 0) missionRows.push({ 'Client':'(no data)' });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(missionRows), 'Deal Flow');
+
+      /* ---- Sheet 2: Planning ---- */
+      const jobRows = jobs.map(j => ({
+        'Client':          j.client || '',
+        'Type':            j.type || '',
+        'Workers':         (j.workers || []).join(', '),
+        'Status':          j.status || '',
+        'Planning Start':  fmt(j.planningStart),
+        'Planning End':    fmt(j.planningEnd),
+        'Effort':          j.numDays ? `${j.numDays}${j.effortUnit === 'hours' ? 'h' : 'd'}` : '',
+        'Sign-off':        fmt(j.signOff),
+        'Assets':          j.assets || '',
+        'Scope / Method':  j.methodology || j.scope || '',
+        'In Deal Flow':    j.inDealFlow ? 'Yes' : 'No',
+      }));
+      if (jobRows.length === 0) jobRows.push({ 'Client':'(no data)' });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(jobRows), 'Planning');
+
+      /* ---- Sheet 3: Dashboard KPIs ---- */
+      const fyStart = today.getMonth() >= 6
+        ? new Date(today.getFullYear(), 6, 1)
+        : new Date(today.getFullYear() - 1, 6, 1);
+      const DONE = ['Sent', 'Lost'];
+      const MISSION_STATUSES = ['Not Started', 'In progress', 'Pending', 'Review', 'GB & SC Review', 'Sent'];
+      const JOB_TYPES_LIST = ['Valuation - Audit','Valuation - Consulting','Transaction Services','CFO','Internal Training','External Training','Business Development','Other'];
+      const activeTeam = teamMembers.filter(m => m.active);
+
+      const dashRows = [
+        { 'Section': 'KPIs', 'Label': 'Export date', 'Value': today.toLocaleDateString('en-GB') },
+        { 'Section': 'KPIs', 'Label': 'Active missions', 'Value': missions.filter(m => !DONE.includes(m.status)).length },
+        { 'Section': 'KPIs', 'Label': 'Active jobs', 'Value': jobs.filter(j => !DONE.includes(j.status)).length },
+        { 'Section': 'KPIs', 'Label': 'Active team members', 'Value': activeTeam.length },
+        { 'Section': '', 'Label': '', 'Value': '' },
+        ...MISSION_STATUSES.map(s => ({
+          'Section': 'Mission Status',
+          'Label':   s,
+          'Value':   missions.filter(m => m.status === s).length,
+        })),
+        { 'Section': '', 'Label': '', 'Value': '' },
+        ...JOB_TYPES_LIST.map(t => ({
+          'Section': 'Work Type Breakdown',
+          'Label':   t,
+          'Value':   jobs.filter(j => j.type === t).length + missions.filter(m => m.type === t).length,
+        })),
+        { 'Section': '', 'Label': '', 'Value': '' },
+        ...activeTeam.map(m => {
+          const memberJobs = jobs.filter(j => (j.workers||[]).includes(m.name) && !DONE.includes(j.status));
+          return {
+            'Section': 'Team Allocation',
+            'Label':   m.name,
+            'Value':   `${memberJobs.length} active job${memberJobs.length !== 1 ? 's' : ''}`,
+          };
+        }),
+      ];
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dashRows), 'Dashboard');
+
+      /* ---- Download ---- */
+      const dateStr = today.toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `HACA_TeamHub_${dateStr}.xlsx`);
+    } catch(e) {
+      alert('Export failed: ' + e.message);
+    }
+    setExporting(false);
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="font-semibold">📥 Export to Excel</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Downloads a .xlsx file with three sheets: Deal Flow, Planning, Dashboard KPIs.</p>
+        </div>
+      </div>
+      <button onClick={doExport} disabled={exporting}
+        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm ${exporting ? 'bg-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 active:scale-[0.98]'}`}>
+        {exporting ? '⏳ Exporting…' : '⬇️ Download Excel'}
+      </button>
+    </div>
+  );
+}
+
 function Settings() {
   const { items } = useRTDB('team');
   const [form, setForm] = useState({name:'',initials:'',color:COLORS_PALETTE[0]});
@@ -3050,6 +3157,7 @@ function Settings() {
         </div>
       </div>
 
+      <ExportButton />
       <EmailSettings />
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3">
