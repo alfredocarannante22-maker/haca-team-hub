@@ -3089,6 +3089,38 @@ function ExportButton() {
       if (histRows.length === 0) histRows.push({ 'Client':'(no historical data)' });
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(histRows), 'Historical');
 
+      /* ---- Sheet 6: Member project history (all time) ---- */
+      const historyRows = [];
+      activeTeam.forEach(member => {
+        const mMissions = missions
+          .filter(m => (m.workers||[]).includes(member.name))
+          .sort((a,b) => (b.deadline||'') > (a.deadline||'') ? 1 : -1);
+        const mJobs = jobs
+          .filter(j => (j.workers||[]).includes(member.name))
+          .sort((a,b) => (b.planningStart||'') > (a.planningStart||'') ? 1 : -1);
+        if (mMissions.length === 0 && mJobs.length === 0) {
+          historyRows.push({ 'Member': member.name, 'Source': '', 'Client': '(no projects)', 'Type': '', 'Status': '', 'Date': '' });
+        }
+        mMissions.forEach(m => historyRows.push({
+          'Member':  member.name,
+          'Source':  'Deal Flow',
+          'Client':  m.client || '',
+          'Type':    m.type || m.mission || '',
+          'Status':  m.status || '',
+          'Date':    fmt(m.deadline),
+        }));
+        mJobs.forEach(j => historyRows.push({
+          'Member':  member.name,
+          'Source':  'Planning',
+          'Client':  j.client || '',
+          'Type':    j.type || '',
+          'Status':  j.status || '',
+          'Date':    fmt(j.planningStart),
+        }));
+      });
+      if (historyRows.length === 0) historyRows.push({ 'Member':'(no data)' });
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(historyRows), 'Member History');
+
       /* ---- Download ---- */
       const dateStr = today.toISOString().slice(0, 10);
       XLSX.writeFile(wb, `HACA_TeamHub_${dateStr}.xlsx`);
@@ -3103,7 +3135,7 @@ function ExportButton() {
       <div className="flex items-start justify-between">
         <div>
           <h2 className="font-semibold">📥 Export to Excel</h2>
-          <p className="text-xs text-gray-500 mt-0.5">Downloads a .xlsx file with 5 sheets: Deal Flow, Planning, Dashboard KPIs, Team Gantt, Historical.</p>
+          <p className="text-xs text-gray-500 mt-0.5">Downloads a .xlsx file with 6 sheets: Deal Flow, Planning, Dashboard KPIs, Team Gantt, Historical, Member History.</p>
         </div>
       </div>
       <button onClick={doExport} disabled={exporting}
