@@ -2581,8 +2581,12 @@ function Meeting() {
   }, [missions, jobs, events, today_iso]);
 
   const pendingBizDev = React.useMemo(() =>
-    bizdev.filter(b => b.status !== 'Sent' && b.outcome !== 'Win' && b.outcome !== 'Loss' && b.outcome !== 'Lost'),
+    bizdev.filter(b => b.outcome !== 'Win' && b.outcome !== 'Loss' && b.outcome !== 'Lost'),
   [bizdev]);
+
+  const upcomingEvents = React.useMemo(() =>
+    events.filter(e => !e.date || e.date >= today_iso),
+  [events, today_iso]);
 
   const current = agenda[index];
 
@@ -2614,8 +2618,8 @@ function Meeting() {
         {[
           { label:'Deal Flow missions', count: agenda.filter(a=>a._kind==='mission').length, color:'bg-violet-500' },
           { label:'Jobs in pipeline',   count: agenda.filter(a=>a._kind==='job').length,     color:'bg-blue-500' },
-          { label:'Events',             count: agenda.filter(a=>a._kind==='event').length,   color:'bg-teal-500' },
-          { label:'Business Dev (pending)', count: pendingBizDev.length,                     color:'bg-indigo-500' },
+          { label:'Events',             count: upcomingEvents.length,                        color:'bg-teal-500' },
+          { label:'Business Dev',       count: pendingBizDev.length,                         color:'bg-indigo-500' },
         ].map(r=>(
           <div key={r.label} className="flex items-center justify-between text-sm">
             <span className="flex items-center gap-2"><span className={`w-2.5 h-2.5 rounded-full ${r.color}`}/>{r.label}</span>
@@ -2628,7 +2632,7 @@ function Meeting() {
         {pendingBizDev.length > 0 && <p className="text-xs text-indigo-500 pt-1">Business Dev table shown below the step-through.</p>}
         {agenda.length===0 && pendingBizDev.length===0 && <p className="text-xs text-gray-400 pt-1">Nothing to discuss — add missions, jobs or events first.</p>}
       </div>
-      <button onClick={()=>setStarted(true)} disabled={agenda.length===0 && pendingBizDev.length===0}
+      <button onClick={()=>setStarted(true)} disabled={agenda.length===0 && pendingBizDev.length===0 && upcomingEvents.length===0}
         className="px-8 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-semibold text-base disabled:opacity-40">
         Start meeting →
       </button>
@@ -2659,7 +2663,7 @@ function Meeting() {
 
   const kindIcon = k => k==='event'?'📅':k==='job'?'💼':'📁';
 
-  const BD_STATUS = ['Not started','Pending','Pause'];
+  const BD_STATUS = ['Not started','Pending','Sent','Pause'];
   const OUTCOME_COLORS = {Win:'bg-emerald-100 text-emerald-700',Loss:'bg-red-100 text-red-600',Lost:'bg-red-100 text-red-600',Pause:'bg-orange-100 text-orange-600'};
 
   return (
@@ -2785,7 +2789,7 @@ function Meeting() {
       {pendingBizDev.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-bold">🤝 Business Development — Pending</h2>
+            <h2 className="text-lg font-bold">🤝 Business Development</h2>
             <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-indigo-50 text-indigo-700">{pendingBizDev.length} item{pendingBizDev.length!==1?'s':''}</span>
           </div>
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -2830,8 +2834,28 @@ function Meeting() {
         </div>
       )}
 
-      {agenda.length===0 && pendingBizDev.length===0 && (
-        <p className="text-gray-400 py-12 text-center">Nothing to review — all items are sent or no items exist yet.</p>
+      {/* ── Events ── */}
+      {upcomingEvents.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-bold">📅 Events</h2>
+            <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold bg-teal-50 text-teal-700">{upcomingEvents.length} upcoming</span>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {upcomingEvents.map(e=>(
+              <div key={e.id} className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-2">
+                <p className="font-semibold">{e.name}</p>
+                {e.date && <p className="text-sm text-blue-600 font-medium">📅 {e.date}</p>}
+                {e.location && <p className="text-sm text-gray-500">📍 {e.location}</p>}
+                {e.comments && <p className="text-sm text-gray-400">{e.comments}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {agenda.length===0 && pendingBizDev.length===0 && upcomingEvents.length===0 && (
+        <p className="text-gray-400 py-12 text-center">Nothing to review — all items are closed or no items exist yet.</p>
       )}
 
     </div>
