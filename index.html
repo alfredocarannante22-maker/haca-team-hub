@@ -2566,6 +2566,8 @@ function Meeting() {
   const [notes,   setNotes]   = useState({});
   const [started, setStarted] = useState(false);
   const [done,    setDone]    = useState(false);
+  const [meetModal, setMeetModal] = useState(null);
+  const [meetForm,  setMeetForm]  = useState({});
 
   const today = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   const today_iso = new Date().toISOString().slice(0,10);
@@ -2589,6 +2591,37 @@ function Meeting() {
   [events, today_iso]);
 
   const current = agenda[index];
+
+  const saveBizDev = () => {
+    const id = `b${Date.now()}`;
+    dbSet('bizdev', id, {
+      id,
+      ...meetForm,
+      pipeType: meetForm.pipeType || 'Offer',
+      responsible: typeof meetForm.responsible === 'string'
+        ? meetForm.responsible.split(',').map(s=>s.trim()).filter(Boolean)
+        : meetForm.responsible || [],
+    });
+    setMeetModal(null);
+  };
+
+  const saveMission = () => {
+    const id = `m${Date.now()}`;
+    const workers = meetForm.workers || [];
+    dbSet('missions', id, { id, ...meetForm, workers });
+    if (workers.length > 0) {
+      const jid = `j${Date.now() + 1}`;
+      dbSet('jobs', jid, {
+        id: jid, client: meetForm.client || '',
+        type: meetForm.type || '', workers,
+        status: 'Not Started', planningStart: '', planningEnd: '',
+        numDays: '', effortUnit: 'days', signOff: meetForm.deadline || '',
+        assets: '', methodology: meetForm.mission || '', scope: '',
+        fromMissionId: id,
+      });
+    }
+    setMeetModal(null);
+  };
 
   const updateStatus   = s  => {
     if (current._kind === 'job') dbUpdate('jobs', current.id, {status: s});
@@ -2669,17 +2702,27 @@ function Meeting() {
   return (
     <div className="space-y-8">
 
+      {/* ── Quick add bar ── */}
+      <div className="flex items-center gap-3 justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Monday Meeting</h1>
+          <p className="text-sm text-gray-500">{today}</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={()=>{setMeetForm({client:'',workers:[],type:'',mission:'',status:'Not Started',comments:'',deadline:''});setMeetModal('add-mission');}}
+            className="px-3 py-2 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700 font-medium">+ New Mission</button>
+          <button onClick={()=>{setMeetForm({opportunity:'',pipeType:'Offer',responsible:'',mission:'',status:'Not started',successRate:'',comments:''});setMeetModal('add-bizdev');}}
+            className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">+ Business Dev</button>
+        </div>
+      </div>
+
       {/* ── Step-through + overview panel ── */}
       {agenda.length > 0 && (
         <div className="flex gap-6 items-start">
 
           {/* ── Left: step-through panel ── */}
           <div className="flex-1 min-w-0 space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold">Monday Meeting</h1>
-                <p className="text-sm text-gray-500">{today}</p>
-              </div>
+            <div className="flex items-center justify-end">
               <span className="text-sm text-gray-400 font-medium">{index+1} / {agenda.length}</span>
             </div>
 
@@ -2856,6 +2899,78 @@ function Meeting() {
 
       {agenda.length===0 && pendingBizDev.length===0 && upcomingEvents.length===0 && (
         <p className="text-gray-400 py-12 text-center">Nothing to review — all items are closed or no items exist yet.</p>
+      )}
+
+      {/* ── Add BizDev modal ── */}
+      {meetModal==='add-bizdev' && (
+        <Modal title="New Business Dev entry" onClose={()=>setMeetModal(null)}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs font-medium text-gray-600">Opportunity</label>
+                <input className={inp+' mt-1'} value={meetForm.opportunity||''} onChange={e=>setMeetForm({...meetForm,opportunity:e.target.value})} /></div>
+              <div><label className="text-xs font-medium text-gray-600">Type</label>
+                <select className={inp+' mt-1'} value={meetForm.pipeType||'Offer'} onChange={e=>setMeetForm({...meetForm,pipeType:e.target.value})}>
+                  <option>Offer</option><option>Pipe</option></select></div>
+            </div>
+            <div><label className="text-xs font-medium text-gray-600">Mission / scope</label>
+              <input className={inp+' mt-1'} value={meetForm.mission||''} onChange={e=>setMeetForm({...meetForm,mission:e.target.value})} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs font-medium text-gray-600">Responsible (comma sep.)</label>
+                <input className={inp+' mt-1'} value={meetForm.responsible||''} onChange={e=>setMeetForm({...meetForm,responsible:e.target.value})} /></div>
+              <div><label className="text-xs font-medium text-gray-600">Win %</label>
+                <input type="number" min={0} max={100} className={inp+' mt-1'} value={meetForm.successRate??''} onChange={e=>setMeetForm({...meetForm,successRate:e.target.value})} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs font-medium text-gray-600">Status</label>
+                <select className={inp+' mt-1'} value={meetForm.status||'Not started'} onChange={e=>setMeetForm({...meetForm,status:e.target.value})}>
+                  {['Not started','Pending','Sent','Pause'].map(s=><option key={s}>{s}</option>)}</select></div>
+              <div><label className="text-xs font-medium text-gray-600">Sent date</label>
+                <input type="date" className={inp+' mt-1'} value={meetForm.sentDate||''} onChange={e=>setMeetForm({...meetForm,sentDate:e.target.value})} /></div>
+            </div>
+            <div><label className="text-xs font-medium text-gray-600">Comments</label>
+              <textarea rows={3} className={inp+' mt-1'} value={meetForm.comments||''} onChange={e=>setMeetForm({...meetForm,comments:e.target.value})} /></div>
+          </div>
+          <div className="flex justify-end gap-2 mt-5">
+            <button onClick={()=>setMeetModal(null)} className="px-3 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+            <button onClick={saveBizDev} className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Add</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Add Mission modal ── */}
+      {meetModal==='add-mission' && (
+        <Modal title="New Mission" onClose={()=>setMeetModal(null)}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs font-medium text-gray-600">Client</label>
+                <input className={inp+' mt-1'} value={meetForm.client||''} onChange={e=>setMeetForm({...meetForm,client:e.target.value})} /></div>
+              <div><label className="text-xs font-medium text-gray-600">Type</label>
+                <select className={inp+' mt-1'} value={meetForm.type||''} onChange={e=>setMeetForm({...meetForm,type:e.target.value})}>
+                  <option value="">— select —</option>
+                  {JOB_TYPES.map(t=><option key={t}>{t}</option>)}</select></div>
+            </div>
+            <div><label className="text-xs font-medium text-gray-600">Mission / scope</label>
+              <input className={inp+' mt-1'} value={meetForm.mission||''} onChange={e=>setMeetForm({...meetForm,mission:e.target.value})} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><label className="text-xs font-medium text-gray-600">Status</label>
+                <select className={inp+' mt-1'} value={meetForm.status||'Not Started'} onChange={e=>setMeetForm({...meetForm,status:e.target.value})}>
+                  {MISSION_STATUSES.map(s=><option key={s}>{s}</option>)}</select></div>
+              <div><label className="text-xs font-medium text-gray-600">Deadline</label>
+                <input type="date" className={inp+' mt-1'} value={meetForm.deadline||''} onChange={e=>setMeetForm({...meetForm,deadline:e.target.value})} /></div>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Assign workers</label>
+              <p className="text-xs text-gray-400 mb-1">If selected, a Planning job will also be created automatically.</p>
+              <WorkerPicker value={meetForm.workers||[]} onChange={w=>setMeetForm({...meetForm,workers:w})} />
+            </div>
+            <div><label className="text-xs font-medium text-gray-600">Comments</label>
+              <textarea rows={2} className={inp+' mt-1'} value={meetForm.comments||''} onChange={e=>setMeetForm({...meetForm,comments:e.target.value})} /></div>
+          </div>
+          <div className="flex justify-end gap-2 mt-5">
+            <button onClick={()=>setMeetModal(null)} className="px-3 py-2 text-sm rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+            <button onClick={saveMission} disabled={!meetForm.client} className="px-4 py-2 text-sm bg-violet-600 text-white rounded-lg hover:bg-violet-700 font-medium disabled:opacity-40">Add</button>
+          </div>
+        </Modal>
       )}
 
     </div>
